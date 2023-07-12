@@ -1,0 +1,165 @@
+(*
+
+This file serves an informal spec for the Open Bot Brain Interface
+Definition Language (OBBIDL)
+
+
+To begin, block comments are between (* ... comment ... *) and can be nested.
+
+The lexical structure of OBBIDL is not set in stone, but a principle
+is that it should not force identifiers to start with lowercase or
+upper case. Even if in this guide there seems to be preference, it is
+just style.
+
+*)
+
+
+(*) Denotes a line comment. The rest of the line is ignored.
+
+
+
+(* OBBIDL is inspired from the OvenMPST system
+(https://nuscr.dev/oven/), which itself is derived from the nuSCR
+system (https://nuscr.dev) which is inspired by the Scribble project
+(https://mrg.cs.ox.ac.uk/tools/scribble/).
+
+Unlike Oven, OBBIDL only supports binary protocols (at lest for now).
+The participant names are C and S for both endpoints. While the
+letters suggest they come from client and server, these namese are
+arbitrary and not really relevant.
+*)
+
+
+(* An OBBIDL file is a sequence of protocols introduced with the
+keyword 'protocol' described below *)
+
+
+(*) Protocols
+
+
+(*) A protocol is introduced by the keyword 'protocol' and the protocol name.
+
+protocol First {}
+
+(* Optionally, after the protocol name there could be an optional role
+declaration. Because the endpoint names are fixed in OBBIDL this is
+not really needed. Roles, endpoints, and participants are synonyms in
+this context. *)
+
+protocol AlsoFirst (role C, S) {}
+
+(*) protocol names in a file must be unique.
+
+
+(*) Messages
+
+(* Protocols at their core define message exchanges. The basic
+primitive the exchange of a message between the endpoints. The message
+must contain a label, and it may contain a payload (the actual data
+exchanged).
+ *)
+
+protocol JustPing {
+   PING from C to S;
+}
+
+(*) Messages can be sequenced just by putting one after the other.
+
+protocol PingPong {
+   PING from C to S;
+   PONG from S to C;
+}
+
+(*) Payloads
+
+(*) Beside the label, messages may carry data. The payload is specified  as follows:
+
+protocol PingPongPayload {
+   PING (count : i32, first : bool) from C to S;
+   PONG (count: i32, string) from S to C;
+}
+
+(* In the previous example PING carries a 32 bit integer and a boolean named count and first.
+Conversely, PONG carries a also an i32 named count, and unnamed string.
+Payload field names are expected to be unique in each label.
+
+Each parameter may have a name that appears before the type separated
+by colon, or just the type. (Names are mostly useful for code generation, but are optional).
+
+The valid types are:
+
+i32 for 32 bit signed integer
+u32 for 32 bit unsigned integer
+bool for boolean values
+string for sequences of characters
+*)
+
+(*) Choice
+
+(* At a certain point there may be more than one form of continuing
+the protocol, we call that choice and it has the following grammar: *)
+
+protocol Choice(role C, role S) {
+  choice {
+    A() from C to S;
+  } or {
+    B() from C to S;
+  } or {
+    C() from C to S;
+  }
+}
+
+(*) for simplicity, the first action by each branch should be the same endpoint.
+
+(*) Parallel
+
+(* As the name implies it enables multiple concurrent protocol states
+to proceed. It should be used sparingly because it makes the protocols
+much more complex and hard to follow. *)
+
+protocol Parallel(role C, role S)
+{
+  par {
+    Q1 from C to S;
+    R1 from S to C;
+  } and {
+    Q2 from C to S;
+    R2 from S to C;
+  }
+}
+
+(*) Note that there is no choice, both branches exist at the same time.
+
+(*) Also, as with choice, more than two branches can be added with the 'and' keyword.
+
+
+(*) Loops and repetition
+
+(*) Finite loops
+
+protocol Finite(role C, S)
+{
+  fin {
+    ACTION from C to S;
+  }
+  END from S to C;
+}
+
+(* The protocol inside the 'fin' block may be done 0, 1, or more
+times. At any point the loop may end and go to the continuation. *)
+
+(*) Infinite loops
+
+
+protocol Infinite
+{
+  inf {
+    ACTION from C to S;
+  }
+}
+
+(* This is also a loop, but one that never terminates, so it makes no
+sense (it may even be rejected, but it is not mandatory) to have a continuation after. *)
+
+
+(*) Oven has richer specifications, but this is a good start
