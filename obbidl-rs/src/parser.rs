@@ -186,11 +186,11 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        ast::{Message, Stmt},
+        ast::{Block, Message, Program, Protocol, Stmt},
         token::Token,
     };
 
-    use super::Parser;
+    use super::{parse, Parser};
 
     #[test]
     fn test_parse_message() {
@@ -206,5 +206,20 @@ mod tests {
             })
         );
         assert_eq!(parser.token, Token::End);
+    }
+
+    #[test]
+    fn test_parse_protocol() {
+        let ast = parse("protocol Test(role A, role B) {}").unwrap();
+        assert_eq!(
+            ast,
+            Program {
+                protocols: vec![Protocol {
+                    name: "Test",
+                    roles: Some(vec!["A", "B"]),
+                    block: Block { stmts: vec![] }
+                }]
+            }
+        )
     }
 }
