@@ -4,22 +4,7 @@ use crate::token::{Keyword, Symbol, Token};
 
 pub struct Lexer<'a> {
     source: &'a str,
-    offset: usize,
-}
-
-fn is_valid_ch(ch: char) -> bool {
-    if ch.is_whitespace() {
-        return true;
-    }
-    if ch.is_alphanumeric() {
-        return true;
-    }
-    for symbol in Symbol::iter() {
-        if ch == symbol.as_char() {
-            return true;
-        }
-    }
-    false
+    pub offset: usize,
 }
 
 impl<'a> Lexer<'a> {
@@ -53,10 +38,42 @@ impl<'a> Lexer<'a> {
             self.next_char();
         }
     }
-    pub fn next_token(&mut self) -> Option<Token> {
+    fn lex_token(&mut self, ch: char) -> Token {
+        if ch.is_alphabetic() || ch == '_' {
+            let start = self.offset;
+            self.next_char();
+            while self
+                .peek_char()
+                .map_or(false, |ch| ch.is_alphanumeric() || ch == '_')
+            {
+                self.next_char();
+            }
+            let end = self.offset;
+            let ident = &self.source[start..end];
+
+            for keyword in Keyword::iter() {
+                if keyword.as_str() == ident {
+                    return Token::Keyword(keyword);
+                }
+            }
+
+            return Token::Ident;
+        }
+
+        for symbol in Symbol::iter() {
+            if symbol.as_char() == ch {
+                self.next_char();
+                return Token::Symbol(symbol);
+            }
+        }
+
+        self.next_char();
+        return Token::Invalid;
+    }
+    pub fn next_token(&mut self) -> (Token, &'a str) {
         loop {
             let Some(ch) = self.peek_char() else {
-                return None;
+                return (Token::End, "");
             };
 
             if ch.is_whitespace() {
@@ -76,40 +93,10 @@ impl<'a> Lexer<'a> {
                 continue;
             }
 
-            if ch.is_alphabetic() || ch == '_' {
-                let start = self.offset;
-                self.next_char();
-                while self
-                    .peek_char()
-                    .map_or(false, |ch| ch.is_alphanumeric() || ch == '_')
-                {
-                    self.next_char();
-                }
-                let end = self.offset;
-                let ident = &self.source[start..end];
-
-                for keyword in Keyword::iter() {
-                    if keyword.as_str() == ident {
-                        return Some(Token::Keyword(keyword));
-                    }
-                }
-
-                return Some(Token::Ident(ident));
-            }
-
-            for symbol in Symbol::iter() {
-                if symbol.as_char() == ch {
-                    self.next_char();
-                    return Some(Token::Symbol(symbol));
-                }
-            }
-
             let start = self.offset;
-            while self.peek_char().map_or(false, |ch| !is_valid_ch(ch)) {
-                self.next_char();
-            }
+            let token = self.lex_token(ch);
             let end = self.offset;
-            return Some(Token::Invalid(&self.source[start..end]));
+            return (token, &self.source[start..end]);
         }
     }
 }
@@ -123,59 +110,53 @@ mod tests {
     #[test]
     fn test_lex_ident() {
         let mut lexer = Lexer::new("something");
-        assert_eq!(lexer.next_token(), Some(Token::Ident("something")));
-        assert!(lexer.next_token().is_none());
+        assert_eq!(lexer.next_token(), (Token::Ident, "something"));
+        assert_eq!(lexer.next_token().0, Token::End);
     }
 
     #[test]
     fn test_lex_keyword() {
         let mut lexer = Lexer::new("protocol");
-        assert_eq!(lexer.next_token(), Some(Token::Keyword(Keyword::Protocol)));
-        assert!(lexer.next_token().is_none());
+        assert_eq!(lexer.next_token().0, Token::Keyword(Keyword::Protocol));
+        assert_eq!(lexer.next_token().0, Token::End);
     }
 
     #[test]
     fn test_lex_whitespace() {
         let mut lexer = Lexer::new("         ");
-        assert!(lexer.next_token().is_none());
+        assert_eq!(lexer.next_token().0, Token::End);
     }
 
     #[test]
     fn test_lex_symbol() {
         let mut lexer = Lexer::new("{ }");
-        assert_eq!(
-            lexer.next_token(),
-            Some(Token::Symbol(Symbol::OpenCurlyBrace))
-        );
-        assert_eq!(
-            lexer.next_token(),
-            Some(Token::Symbol(Symbol::CloseCurlyBrace))
-        );
-        assert!(lexer.next_token().is_none());
+        assert_eq!(lexer.next_token().0, Token::Symbol(Symbol::OpenCurlyBrace));
+        assert_eq!(lexer.next_token().0, Token::Symbol(Symbol::CloseCurlyBrace));
+        assert_eq!(lexer.next_token().0, Token::End);
     }
 
     #[test]
     fn text_lex_line_comment() {
         let mut lexer = Lexer::new("(*) line comment");
-        assert_eq!(lexer.next_token(), None);
+        assert_eq!(lexer.next_token().0, Token::End);
     }
 
     #[test]
     fn text_lex_multi_line_comment() {
         let mut lexer = Lexer::new("(* multi \n line \n comment *)");
-        assert_eq!(lexer.next_token(), None);
+        assert_eq!(lexer.next_token().0, Token::End);
     }
 
     #[test]
     fn text_lex_nested_comments() {
         let mut lexer = Lexer::new("(* (* something *) *)");
-        assert_eq!(lexer.next_token(), None);
+        assert_eq!(lexer.next_token().0, Token::End);
     }
 
     #[test]
     fn test_lex_invalid() {
-        let mut lexer = Lexer::new("...");
-        assert_eq!(lexer.next_token(), Some(Token::Invalid("...")));
-        assert!(lexer.next_token().is_none());
+        let mut lexer = Lexer::new(".");
+        assert_eq!(lexer.next_token(), (Token::Invalid, "."));
+        assert_eq!(lexer.next_token(), (Token::End, ""));
     }
 }

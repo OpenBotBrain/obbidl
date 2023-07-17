@@ -1,11 +1,12 @@
 use strum::EnumIter;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Token<'a> {
-    Ident(&'a str),
+pub enum Token {
+    Ident,
     Keyword(Keyword),
     Symbol(Symbol),
-    Invalid(&'a str),
+    Invalid,
+    End,
 }
 
 #[derive(Debug, Clone, Copy, EnumIter, PartialEq)]
@@ -16,6 +17,14 @@ pub enum Keyword {
     Par,
     Fin,
     Inf,
+    Choice,
+    And,
+    Or,
+    String,
+    U32,
+    I32,
+    Bool,
+    Role,
 }
 
 #[derive(Debug, Clone, Copy, EnumIter, PartialEq)]
@@ -38,6 +47,14 @@ impl Keyword {
             Keyword::Par => "par",
             Keyword::Fin => "fin",
             Keyword::Inf => "inf",
+            Keyword::Choice => "choice",
+            Keyword::And => "and",
+            Keyword::Or => "or",
+            Keyword::String => "string",
+            Keyword::U32 => "u32",
+            Keyword::I32 => "i32",
+            Keyword::Bool => "bool",
+            Keyword::Role => "role",
         }
     }
 }
