@@ -1,3 +1,5 @@
+use std::mem::{replace, swap};
+
 use crate::{
     ast::{Block, IntSize, Message, Program, Protocol, Stmt, Type},
     lexer::Lexer,
@@ -57,9 +59,12 @@ impl<'a> Parser<'a> {
         }
     }
     fn expect_token(&mut self, token: Token) -> Result<&'a str, ParseError> {
-        self.eat_token(token).ok_or_else(|| self.error())
+        if let Some(source) = self.eat_token(token) {
+            return Ok(source);
+        }
+        Err(self.invalid_token())
     }
-    fn error(&self) -> ParseError {
+    fn invalid_token(&mut self) -> ParseError {
         let mut line = 1;
         let mut column = 1;
         for (offset, ch) in self.source.char_indices() {
@@ -74,7 +79,7 @@ impl<'a> Parser<'a> {
             }
         }
         ParseError {
-            expected_tokens: self.expected_tokens.clone(),
+            expected_tokens: replace(&mut self.expected_tokens, vec![]),
             line,
             column,
         }
@@ -95,7 +100,7 @@ impl<'a> Parser<'a> {
                 size: IntSize::B32,
             })
         } else {
-            Err(self.error())
+            Err(self.invalid_token())
         }
     }
     fn parse_stmt(&mut self) -> Result<Stmt<'a>, ParseError> {
@@ -146,7 +151,7 @@ impl<'a> Parser<'a> {
         } else if self.eat_token(Token::Keyword(Keyword::Inf)).is_some() {
             Ok(Stmt::Inf(self.parse_block()?))
         } else {
-            Err(self.error())
+            Err(self.invalid_token())
         }
     }
     fn parse_block(&mut self) -> Result<Block<'a>, ParseError> {
