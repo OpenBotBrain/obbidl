@@ -1,30 +1,81 @@
-use std::mem::{replace, swap};
+use core::fmt;
+use std::mem::replace;
+
+use colored::Colorize;
 
 use crate::{
     ast::{Block, IntSize, Message, Program, Protocol, Stmt, Type},
     lexer::Lexer,
-    token::{Keyword, Symbol, Token},
+    token::{Keyword, Symbol, Token, TokenType},
 };
 
 struct Parser<'a> {
     source: &'a str,
     lexer: Lexer<'a>,
-    token: Token,
-    contents: &'a str,
-    expected_tokens: Vec<Token>,
+    token: Token<'a>,
+    expected_tokens: Vec<TokenType>,
 }
 
 #[derive(Debug)]
-pub struct ParseError {
-    pub expected_tokens: Vec<Token>,
+pub struct ParseError<'a> {
+    pub token: Token<'a>,
+    pub expected_tokens: Vec<TokenType>,
     pub line: u32,
     pub column: u32,
 }
 
-pub fn parse<'a>(source: &'a str) -> Result<Program, ParseError> {
+type ParseResult<'a, T> = Result<T, ParseError<'a>>;
+
+struct TokenTypeName(TokenType);
+
+impl fmt::Display for TokenTypeName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            TokenType::Ident => write!(f, "an identifier"),
+            TokenType::Keyword(keyword) => write!(f, "the keyword '{}'", keyword.as_str()),
+            TokenType::Symbol(symbol) => write!(f, "the symbol '{}'", symbol.as_char()),
+            TokenType::End => write!(f, "the end of the input"),
+            TokenType::Invalid => panic!(),
+        }
+    }
+}
+
+struct TokenName<'a>(Token<'a>);
+
+impl<'a> fmt::Display for TokenName<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0.ty {
+            TokenType::Ident => write!(f, "the identifier '{}'", self.0.contents),
+            TokenType::Keyword(keyword) => write!(f, "the keyword '{}'", keyword.as_str()),
+            TokenType::Symbol(symbol) => write!(f, "the symbol '{}'", symbol.as_char()),
+            TokenType::Invalid => write!(f, "the invalid character '{}'", self.0.contents),
+            TokenType::End => write!(f, "the end of the input"),
+        }
+    }
+}
+
+impl<'a> fmt::Display for ParseError<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(
+            f,
+            "{}: line {}, column {}",
+            "SYNTAX ERROR".red(),
+            self.line,
+            self.column
+        )?;
+        writeln!(f, "  Expected one of the following:",)?;
+        for token in &self.expected_tokens {
+            writeln!(f, "    - {}", TokenTypeName(*token))?;
+        }
+        writeln!(f, "  Instead found {}", TokenName(self.token))?;
+        Ok(())
+    }
+}
+
+pub fn parse<'a>(source: &'a str) -> ParseResult<'a, Program> {
     let mut parser = Parser::new(source);
     let mut protocols = vec![];
-    while parser.token != Token::End {
+    while !parser.eat_token(TokenType::End).is_some() {
         protocols.push(parser.parse_protocol()?);
     }
     Ok(Program { protocols })
@@ -33,38 +84,35 @@ pub fn parse<'a>(source: &'a str) -> Result<Program, ParseError> {
 impl<'a> Parser<'a> {
     pub fn new(source: &'a str) -> Parser<'a> {
         let mut lexer = Lexer::new(source);
-        let (token, contents) = lexer.next_token();
+        let token = lexer.next_token();
         Parser {
             lexer,
             token,
-            contents,
             source,
             expected_tokens: vec![],
         }
     }
     fn next_token(&mut self) -> &'a str {
         self.expected_tokens.truncate(0);
-        let (token, contents) = self.lexer.next_token();
-        let old_contents = self.contents;
-        self.token = token;
-        self.contents = contents;
-        old_contents
+        let old_token = self.token;
+        self.token = self.lexer.next_token();
+        old_token.contents
     }
-    fn eat_token(&mut self, token: Token) -> Option<&'a str> {
-        if self.token == token {
+    fn eat_token(&mut self, token: TokenType) -> Option<&'a str> {
+        if self.token.ty == token {
             Some(self.next_token())
         } else {
             self.expected_tokens.push(token);
             None
         }
     }
-    fn expect_token(&mut self, token: Token) -> Result<&'a str, ParseError> {
+    fn expect_token(&mut self, token: TokenType) -> ParseResult<'a, &'a str> {
         if let Some(source) = self.eat_token(token) {
             return Ok(source);
         }
         Err(self.invalid_token())
     }
-    fn invalid_token(&mut self) -> ParseError {
+    fn invalid_token(&mut self) -> ParseError<'a> {
         let mut line = 1;
         let mut column = 1;
         for (offset, ch) in self.source.char_indices() {
@@ -82,19 +130,23 @@ impl<'a> Parser<'a> {
             expected_tokens: replace(&mut self.expected_tokens, vec![]),
             line,
             column,
+            token: self.token,
         }
     }
-    fn parse_type(&mut self) -> Result<Type, ParseError> {
-        if self.eat_token(Token::Keyword(Keyword::Bool)).is_some() {
+    fn parse_type(&mut self) -> ParseResult<'a, Type> {
+        if self.eat_token(TokenType::Keyword(Keyword::Bool)).is_some() {
             Ok(Type::Bool)
-        } else if self.eat_token(Token::Keyword(Keyword::String)).is_some() {
+        } else if self
+            .eat_token(TokenType::Keyword(Keyword::String))
+            .is_some()
+        {
             Ok(Type::String)
-        } else if self.eat_token(Token::Keyword(Keyword::U32)).is_some() {
+        } else if self.eat_token(TokenType::Keyword(Keyword::U32)).is_some() {
             Ok(Type::Int {
                 signed: false,
                 size: IntSize::B32,
             })
-        } else if self.eat_token(Token::Keyword(Keyword::I32)).is_some() {
+        } else if self.eat_token(TokenType::Keyword(Keyword::I32)).is_some() {
             Ok(Type::Int {
                 signed: true,
                 size: IntSize::B32,
@@ -103,17 +155,23 @@ impl<'a> Parser<'a> {
             Err(self.invalid_token())
         }
     }
-    fn parse_stmt(&mut self) -> Result<Stmt<'a>, ParseError> {
-        if let Some(label) = self.eat_token(Token::Ident) {
-            let payload = if self.eat_token(Token::Symbol(Symbol::OpenBrace)).is_some() {
+    fn parse_stmt(&mut self) -> ParseResult<'a, Stmt<'a>> {
+        if let Some(label) = self.eat_token(TokenType::Ident) {
+            let payload = if self
+                .eat_token(TokenType::Symbol(Symbol::OpenBrace))
+                .is_some()
+            {
                 let mut payload = vec![];
-                while !self.eat_token(Token::Symbol(Symbol::CloseBrace)).is_some() {
-                    let name = self.expect_token(Token::Ident)?;
-                    self.expect_token(Token::Symbol(Symbol::Colon))?;
+                while !self
+                    .eat_token(TokenType::Symbol(Symbol::CloseBrace))
+                    .is_some()
+                {
+                    let name = self.expect_token(TokenType::Ident)?;
+                    self.expect_token(TokenType::Symbol(Symbol::Colon))?;
                     let ty = self.parse_type()?;
                     payload.push((name, ty));
-                    if !self.eat_token(Token::Symbol(Symbol::Comma)).is_some() {
-                        self.expect_token(Token::Symbol(Symbol::CloseBrace))?;
+                    if !self.eat_token(TokenType::Symbol(Symbol::Comma)).is_some() {
+                        self.expect_token(TokenType::Symbol(Symbol::CloseBrace))?;
                         break;
                     }
                 }
@@ -121,60 +179,69 @@ impl<'a> Parser<'a> {
             } else {
                 None
             };
-            self.expect_token(Token::Keyword(Keyword::From))?;
-            let from = self.expect_token(Token::Ident)?;
-            self.expect_token(Token::Keyword(Keyword::To))?;
-            let to = self.expect_token(Token::Ident)?;
-            self.expect_token(Token::Symbol(Symbol::Semicolon))?;
+            self.expect_token(TokenType::Keyword(Keyword::From))?;
+            let from = self.expect_token(TokenType::Ident)?;
+            self.expect_token(TokenType::Keyword(Keyword::To))?;
+            let to = self.expect_token(TokenType::Ident)?;
+            self.expect_token(TokenType::Symbol(Symbol::Semicolon))?;
             Ok(Stmt::Message(Message {
                 label,
                 payload,
                 from,
                 to,
             }))
-        } else if self.eat_token(Token::Keyword(Keyword::Choice)).is_some() {
+        } else if self
+            .eat_token(TokenType::Keyword(Keyword::Choice))
+            .is_some()
+        {
             let mut blocks = vec![];
             blocks.push(self.parse_block()?);
-            while self.eat_token(Token::Keyword(Keyword::Or)).is_some() {
+            while self.eat_token(TokenType::Keyword(Keyword::Or)).is_some() {
                 blocks.push(self.parse_block()?);
             }
             Ok(Stmt::Choice(blocks))
-        } else if self.eat_token(Token::Keyword(Keyword::Par)).is_some() {
+        } else if self.eat_token(TokenType::Keyword(Keyword::Par)).is_some() {
             let mut blocks = vec![];
             blocks.push(self.parse_block()?);
-            while self.eat_token(Token::Keyword(Keyword::And)).is_some() {
+            while self.eat_token(TokenType::Keyword(Keyword::And)).is_some() {
                 blocks.push(self.parse_block()?);
             }
             Ok(Stmt::Par(blocks))
-        } else if self.eat_token(Token::Keyword(Keyword::Fin)).is_some() {
+        } else if self.eat_token(TokenType::Keyword(Keyword::Fin)).is_some() {
             Ok(Stmt::Fin(self.parse_block()?))
-        } else if self.eat_token(Token::Keyword(Keyword::Inf)).is_some() {
+        } else if self.eat_token(TokenType::Keyword(Keyword::Inf)).is_some() {
             Ok(Stmt::Inf(self.parse_block()?))
         } else {
             Err(self.invalid_token())
         }
     }
-    fn parse_block(&mut self) -> Result<Block<'a>, ParseError> {
-        self.expect_token(Token::Symbol(Symbol::OpenCurlyBrace))?;
+    fn parse_block(&mut self) -> ParseResult<'a, Block<'a>> {
+        self.expect_token(TokenType::Symbol(Symbol::OpenCurlyBrace))?;
         let mut stmts = vec![];
         while !self
-            .eat_token(Token::Symbol(Symbol::CloseCurlyBrace))
+            .eat_token(TokenType::Symbol(Symbol::CloseCurlyBrace))
             .is_some()
         {
             stmts.push(self.parse_stmt()?)
         }
         Ok(Block { stmts })
     }
-    fn parse_protocol(&mut self) -> Result<Protocol<'a>, ParseError> {
-        self.expect_token(Token::Keyword(Keyword::Protocol))?;
-        let name = self.expect_token(Token::Ident)?;
-        let roles = if self.eat_token(Token::Symbol(Symbol::OpenBrace)).is_some() {
+    fn parse_protocol(&mut self) -> ParseResult<'a, Protocol<'a>> {
+        self.expect_token(TokenType::Keyword(Keyword::Protocol))?;
+        let name = self.expect_token(TokenType::Ident)?;
+        let roles = if self
+            .eat_token(TokenType::Symbol(Symbol::OpenBrace))
+            .is_some()
+        {
             let mut roles = vec![];
-            while !self.eat_token(Token::Symbol(Symbol::CloseBrace)).is_some() {
-                self.expect_token(Token::Keyword(Keyword::Role))?;
-                roles.push(self.expect_token(Token::Ident)?);
-                if !self.eat_token(Token::Symbol(Symbol::Comma)).is_some() {
-                    self.expect_token(Token::Symbol(Symbol::CloseBrace))?;
+            while !self
+                .eat_token(TokenType::Symbol(Symbol::CloseBrace))
+                .is_some()
+            {
+                self.expect_token(TokenType::Keyword(Keyword::Role))?;
+                roles.push(self.expect_token(TokenType::Ident)?);
+                if !self.eat_token(TokenType::Symbol(Symbol::Comma)).is_some() {
+                    self.expect_token(TokenType::Symbol(Symbol::CloseBrace))?;
                     break;
                 }
             }
@@ -192,7 +259,7 @@ impl<'a> Parser<'a> {
 mod tests {
     use crate::{
         ast::{Block, Message, Program, Protocol, Stmt},
-        token::Token,
+        token::TokenType,
     };
 
     use super::{parse, Parser};
@@ -210,7 +277,7 @@ mod tests {
                 to: "B"
             })
         );
-        assert_eq!(parser.token, Token::End);
+        assert_eq!(parser.token.ty, TokenType::End);
     }
 
     #[test]

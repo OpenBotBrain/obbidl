@@ -1,7 +1,14 @@
 use strum::EnumIter;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Token {
+pub struct Token<'a> {
+    pub ty: TokenType,
+    pub contents: &'a str,
+    pub offset: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TokenType {
     Ident,
     Keyword(Keyword),
     Symbol(Symbol),

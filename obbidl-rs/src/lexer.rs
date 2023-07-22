@@ -1,6 +1,6 @@
 use strum::IntoEnumIterator;
 
-use crate::token::{Keyword, Symbol, Token};
+use crate::token::{Keyword, Symbol, Token, TokenType};
 
 pub struct Lexer<'a> {
     source: &'a str,
@@ -38,7 +38,7 @@ impl<'a> Lexer<'a> {
             self.next_char();
         }
     }
-    fn lex_token(&mut self, ch: char) -> Token {
+    fn lex_token(&mut self, ch: char) -> TokenType {
         if ch.is_alphabetic() || ch == '_' {
             let start = self.offset;
             self.next_char();
@@ -53,27 +53,27 @@ impl<'a> Lexer<'a> {
 
             for keyword in Keyword::iter() {
                 if keyword.as_str() == ident {
-                    return Token::Keyword(keyword);
+                    return TokenType::Keyword(keyword);
                 }
             }
 
-            return Token::Ident;
+            return TokenType::Ident;
         }
 
         for symbol in Symbol::iter() {
             if symbol.as_char() == ch {
                 self.next_char();
-                return Token::Symbol(symbol);
+                return TokenType::Symbol(symbol);
             }
         }
 
         self.next_char();
-        return Token::Invalid;
+        return TokenType::Invalid;
     }
-    pub fn next_token(&mut self) -> (Token, &'a str) {
+    pub fn next_token(&mut self) -> Token<'a> {
         loop {
             let Some(ch) = self.peek_char() else {
-                return (Token::End, "");
+                return Token { ty: TokenType::End, contents: "", offset: self.offset };
             };
 
             if ch.is_whitespace() {
@@ -94,69 +94,79 @@ impl<'a> Lexer<'a> {
             }
 
             let start = self.offset;
-            let token = self.lex_token(ch);
+            let ty = self.lex_token(ch);
             let end = self.offset;
-            return (token, &self.source[start..end]);
+            return Token {
+                ty,
+                contents: &self.source[start..end],
+                offset: start,
+            };
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::token::{Keyword, Symbol, Token};
+    use crate::token::{Keyword, Symbol, TokenType};
 
     use super::Lexer;
 
     #[test]
     fn test_lex_ident() {
         let mut lexer = Lexer::new("something");
-        assert_eq!(lexer.next_token(), (Token::Ident, "something"));
-        assert_eq!(lexer.next_token().0, Token::End);
+        assert_eq!(lexer.next_token().ty, TokenType::Ident);
+        assert_eq!(lexer.next_token().ty, TokenType::End);
     }
 
     #[test]
     fn test_lex_keyword() {
         let mut lexer = Lexer::new("protocol");
-        assert_eq!(lexer.next_token().0, Token::Keyword(Keyword::Protocol));
-        assert_eq!(lexer.next_token().0, Token::End);
+        assert_eq!(lexer.next_token().ty, TokenType::Keyword(Keyword::Protocol));
+        assert_eq!(lexer.next_token().ty, TokenType::End);
     }
 
     #[test]
     fn test_lex_whitespace() {
         let mut lexer = Lexer::new("         ");
-        assert_eq!(lexer.next_token().0, Token::End);
+        assert_eq!(lexer.next_token().ty, TokenType::End);
     }
 
     #[test]
     fn test_lex_symbol() {
         let mut lexer = Lexer::new("{ }");
-        assert_eq!(lexer.next_token().0, Token::Symbol(Symbol::OpenCurlyBrace));
-        assert_eq!(lexer.next_token().0, Token::Symbol(Symbol::CloseCurlyBrace));
-        assert_eq!(lexer.next_token().0, Token::End);
+        assert_eq!(
+            lexer.next_token().ty,
+            TokenType::Symbol(Symbol::OpenCurlyBrace)
+        );
+        assert_eq!(
+            lexer.next_token().ty,
+            TokenType::Symbol(Symbol::CloseCurlyBrace)
+        );
+        assert_eq!(lexer.next_token().ty, TokenType::End);
     }
 
     #[test]
     fn text_lex_line_comment() {
         let mut lexer = Lexer::new("(*) line comment");
-        assert_eq!(lexer.next_token().0, Token::End);
+        assert_eq!(lexer.next_token().ty, TokenType::End);
     }
 
     #[test]
     fn text_lex_multi_line_comment() {
         let mut lexer = Lexer::new("(* multi \n line \n comment *)");
-        assert_eq!(lexer.next_token().0, Token::End);
+        assert_eq!(lexer.next_token().ty, TokenType::End);
     }
 
     #[test]
     fn text_lex_nested_comments() {
         let mut lexer = Lexer::new("(* (* something *) *)");
-        assert_eq!(lexer.next_token().0, Token::End);
+        assert_eq!(lexer.next_token().ty, TokenType::End);
     }
 
     #[test]
     fn test_lex_invalid() {
         let mut lexer = Lexer::new(".");
-        assert_eq!(lexer.next_token(), (Token::Invalid, "."));
-        assert_eq!(lexer.next_token(), (Token::End, ""));
+        assert_eq!(lexer.next_token().ty, TokenType::Invalid);
+        assert_eq!(lexer.next_token().ty, TokenType::End);
     }
 }
