@@ -71,54 +71,34 @@ pub fn generate_transitions(seq: &Sequence) -> Vec<(Message, Sequence)> {
         Stmt::Par(seqs) => {
             for (i, seq) in seqs.iter().enumerate() {
                 for (msg, rem_seq) in generate_transitions(seq) {
-                    let new_seqs = seqs
-                        .iter()
-                        .take(i)
-                        .cloned()
-                        .chain(Some(rem_seq).into_iter())
-                        .chain(seqs.iter().rev().take(seqs.len() - i - 1).rev().cloned())
-                        .collect();
-                    trans.push((
-                        msg,
-                        Sequence(
-                            Some(Stmt::Par(new_seqs))
-                                .iter()
-                                .chain(iter.clone())
-                                .cloned()
-                                .collect(),
-                        ),
-                    ))
+                    let mut new_seqs = vec![];
+                    new_seqs.extend(seqs.iter().take(i).cloned());
+                    new_seqs.push(rem_seq);
+                    new_seqs.extend(seqs.iter().rev().take(seqs.len() - i - 1).rev().cloned());
+
+                    let mut stmts = vec![Stmt::Par(new_seqs)];
+                    stmts.extend(iter.clone().cloned());
+
+                    trans.push((msg, Sequence(stmts)))
                 }
             }
         }
         Stmt::Inf(seq) => {
             for (msg, rem_seq) in generate_transitions(seq) {
-                trans.push((
-                    msg,
-                    Sequence(
-                        rem_seq
-                            .0
-                            .into_iter()
-                            .chain(Some(Stmt::Inf(seq.clone())).into_iter())
-                            .chain(iter.clone().cloned())
-                            .collect(),
-                    ),
-                ))
+                let mut stmts = vec![];
+                stmts.extend(rem_seq.0);
+                stmts.push(Stmt::Inf(seq.clone()));
+                stmts.extend(iter.clone().cloned());
+                trans.push((msg, Sequence(stmts)))
             }
         }
         Stmt::Fin(seq) => {
             for (msg, rem_seq) in generate_transitions(seq) {
-                trans.push((
-                    msg,
-                    Sequence(
-                        rem_seq
-                            .0
-                            .into_iter()
-                            .chain(Some(Stmt::Fin(seq.clone())).into_iter())
-                            .chain(iter.clone().cloned())
-                            .collect(),
-                    ),
-                ));
+                let mut stmts = vec![];
+                stmts.extend(rem_seq.0);
+                stmts.push(Stmt::Fin(seq.clone()));
+                stmts.extend(iter.clone().cloned());
+                trans.push((msg, Sequence(stmts)));
             }
         }
     }
