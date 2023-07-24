@@ -1,7 +1,7 @@
 use std::hash::Hash;
 
 use crate::{
-    parse::{MaybeParse, Parse, ParseResult},
+    parser::{MaybeParse, Parse, ParseResult},
     token::{Keyword, Symbol, TokenType},
 };
 
@@ -66,7 +66,7 @@ pub struct Program {
 }
 
 impl MaybeParse for Message {
-    fn parse<'a>(parser: &mut crate::parse::Parser<'a>) -> ParseResult<'a, Option<Self>> {
+    fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Option<Self>> {
         if let Some(label) = parser.eat_token(TokenType::Ident) {
             let payload = if parser
                 .eat_token(TokenType::Symbol(Symbol::OpenBrace))
@@ -108,7 +108,7 @@ impl MaybeParse for Message {
 }
 
 impl Parse for Type {
-    fn parse<'a>(parser: &mut crate::parse::Parser<'a>) -> ParseResult<'a, Self> {
+    fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
         if parser
             .eat_token(TokenType::Keyword(Keyword::Bool))
             .is_some()
@@ -136,7 +136,7 @@ impl Parse for Type {
 }
 
 impl Parse for Stmt {
-    fn parse<'a>(parser: &mut crate::parse::Parser<'a>) -> ParseResult<'a, Self> {
+    fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
         if let Some(msg) = Message::parse(parser)? {
             Ok(Stmt::Message(msg))
         } else if parser
@@ -167,7 +167,7 @@ impl Parse for Stmt {
 }
 
 impl Parse for Sequence {
-    fn parse<'a>(parser: &mut crate::parse::Parser<'a>) -> ParseResult<'a, Self> {
+    fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
         parser.expect_token(TokenType::Symbol(Symbol::OpenCurlyBrace))?;
         let mut stmts = vec![];
         while !parser
@@ -181,7 +181,7 @@ impl Parse for Sequence {
 }
 
 impl Parse for ProtocolDef {
-    fn parse<'a>(parser: &mut crate::parse::Parser<'a>) -> ParseResult<'a, Self> {
+    fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
         parser.expect_token(TokenType::Keyword(Keyword::Protocol))?;
         let name = parser.expect_token(TokenType::Ident)?.to_string();
         let roles = if parser

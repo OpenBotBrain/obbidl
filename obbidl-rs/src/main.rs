@@ -1,31 +1,34 @@
-use std::fs;
+use std::{fs, process::Command};
 
-use parser::{parse, parse_seq};
+use parser::parse;
 
-use crate::compile::{compile_seq, generate_transitions};
+use crate::{compile::compile_seq, fsm::GraphViz};
 
 mod ast;
 mod compile;
 mod fsm;
 mod lexer;
-mod parse;
 mod parser;
 mod token;
 
 fn main() {
-    // let source = fs::read_to_string("example.txt").unwrap();
-    // let ast = match parse(&source) {
-    //     Ok(ast) => ast,
-    //     Err(err) => {
-    //         println!("{}", err);
-    //         return;
-    //     }
-    // };
-    // println!("{:#?}", ast);
-
-    let seq = parse_seq("{ X from C to S; Y from C to S; }").unwrap();
+    let source = fs::read_to_string("example.txt").unwrap();
+    let seq = match parse(&source) {
+        Ok(ast) => ast,
+        Err(err) => {
+            println!("{}", err);
+            return;
+        }
+    };
 
     let state_machine = compile_seq(&seq);
 
-    println!("{:#?}", state_machine);
+    fs::write("output.dot", GraphViz(state_machine).to_string()).unwrap();
+
+    Command::new("dot")
+        .arg("-Tsvg")
+        .arg("-O")
+        .arg("output.dot")
+        .status()
+        .unwrap();
 }

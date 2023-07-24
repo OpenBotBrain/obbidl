@@ -1,4 +1,4 @@
-use std::{collections::HashSet, hash};
+use std::{collections::HashSet, fmt, hash};
 
 use crate::ast::Type;
 
@@ -13,7 +13,7 @@ pub struct Transistion {
     pub payload: Option<Vec<(String, Type)>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StateMachine {
     state_count: u32,
     transitions: HashSet<Transistion>,
@@ -63,5 +63,23 @@ impl StateMachine {
     }
     pub fn iter_states(&self) -> impl Iterator<Item = State> + '_ {
         (0..self.state_count).map(|id| State(id))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct GraphViz(pub StateMachine);
+
+impl fmt::Display for GraphViz {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "digraph {{")?;
+        for trans in self.0.iter_transitions() {
+            writeln!(
+                f,
+                "  {} -> {}[label=\"{}\"];",
+                trans.start.0, trans.end.0, trans.label
+            )?;
+        }
+        writeln!(f, "}}")?;
+        Ok(())
     }
 }
