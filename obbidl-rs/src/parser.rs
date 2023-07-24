@@ -1,15 +1,13 @@
-use core::fmt;
-use std::mem::replace;
+use std::{fmt, mem::replace};
 
 use colored::Colorize;
 
 use crate::{
-    ast::{IntSize, Message, Program, ProtocolDef, Sequence, Stmt, Type},
     lexer::Lexer,
-    token::{Keyword, Symbol, Token, TokenType},
+    token::{Token, TokenType},
 };
 
-struct Parser<'a> {
+pub struct Parser<'a> {
     source: &'a str,
     lexer: Lexer<'a>,
     token: Token<'a>,
@@ -24,7 +22,7 @@ pub struct ParseError<'a> {
     pub column: u32,
 }
 
-type ParseResult<'a, T> = Result<T, ParseError<'a>>;
+pub type ParseResult<'a, T> = Result<T, ParseError<'a>>;
 
 struct TokenTypeName(TokenType);
 
@@ -72,18 +70,18 @@ impl<'a> fmt::Display for ParseError<'a> {
     }
 }
 
-pub fn parse<'a>(source: &'a str) -> ParseResult<'a, Program> {
-    let mut parser = Parser::new(source);
-    let mut protocols = vec![];
-    while !parser.eat_token(TokenType::End).is_some() {
-        protocols.push(parser.parse_protocol()?);
-    }
-    Ok(Program { protocols })
+pub trait Parse
+where
+    Self: Sized,
+{
+    fn parse<'a>(parser: &mut Parser<'a>) -> ParseResult<'a, Self>;
 }
 
-pub fn parse_seq<'a>(source: &'a str) -> ParseResult<'a, Sequence> {
-    let mut parser = Parser::new(source);
-    parser.parse_seq()
+pub trait MaybeParse
+where
+    Self: Sized,
+{
+    fn parse<'a>(parser: &mut Parser<'a>) -> ParseResult<'a, Option<Self>>;
 }
 
 impl<'a> Parser<'a> {
@@ -97,13 +95,13 @@ impl<'a> Parser<'a> {
             expected_tokens: vec![],
         }
     }
-    fn next_token(&mut self) -> &'a str {
+    pub fn next_token(&mut self) -> &'a str {
         self.expected_tokens.truncate(0);
         let old_token = self.token;
         self.token = self.lexer.next_token();
         old_token.contents
     }
-    fn eat_token(&mut self, token: TokenType) -> Option<&'a str> {
+    pub fn eat_token(&mut self, token: TokenType) -> Option<&'a str> {
         if self.token.ty == token {
             Some(self.next_token())
         } else {
@@ -111,13 +109,13 @@ impl<'a> Parser<'a> {
             None
         }
     }
-    fn expect_token(&mut self, token: TokenType) -> ParseResult<'a, &'a str> {
+    pub fn expect_token(&mut self, token: TokenType) -> ParseResult<'a, &'a str> {
         if let Some(source) = self.eat_token(token) {
             return Ok(source);
         }
         Err(self.invalid_token())
     }
-    fn invalid_token(&mut self) -> ParseError<'a> {
+    pub fn invalid_token(&mut self) -> ParseError<'a> {
         let mut line = 1;
         let mut column = 1;
         for (offset, ch) in self.source.char_indices() {
@@ -138,165 +136,18 @@ impl<'a> Parser<'a> {
             token: self.token,
         }
     }
-    fn parse_type(&mut self) -> ParseResult<'a, Type> {
-        if self.eat_token(TokenType::Keyword(Keyword::Bool)).is_some() {
-            Ok(Type::Bool)
-        } else if self
-            .eat_token(TokenType::Keyword(Keyword::String))
-            .is_some()
-        {
-            Ok(Type::String)
-        } else if self.eat_token(TokenType::Keyword(Keyword::U32)).is_some() {
-            Ok(Type::Int {
-                signed: false,
-                size: IntSize::B32,
-            })
-        } else if self.eat_token(TokenType::Keyword(Keyword::I32)).is_some() {
-            Ok(Type::Int {
-                signed: true,
-                size: IntSize::B32,
-            })
-        } else {
-            Err(self.invalid_token())
-        }
-    }
-    fn parse_stmt(&mut self) -> ParseResult<'a, Stmt> {
-        if let Some(label) = self.eat_token(TokenType::Ident) {
-            let payload = if self
-                .eat_token(TokenType::Symbol(Symbol::OpenBrace))
-                .is_some()
-            {
-                let mut payload = vec![];
-                while !self
-                    .eat_token(TokenType::Symbol(Symbol::CloseBrace))
-                    .is_some()
-                {
-                    let name = self.expect_token(TokenType::Ident)?;
-                    self.expect_token(TokenType::Symbol(Symbol::Colon))?;
-                    let ty = self.parse_type()?;
-                    payload.push((name.to_string(), ty));
-                    if !self.eat_token(TokenType::Symbol(Symbol::Comma)).is_some() {
-                        self.expect_token(TokenType::Symbol(Symbol::CloseBrace))?;
-                        break;
-                    }
-                }
-                Some(payload)
-            } else {
-                None
-            };
-            self.expect_token(TokenType::Keyword(Keyword::From))?;
-            let from = self.expect_token(TokenType::Ident)?.to_string();
-            self.expect_token(TokenType::Keyword(Keyword::To))?;
-            let to = self.expect_token(TokenType::Ident)?.to_string();
-            self.expect_token(TokenType::Symbol(Symbol::Semicolon))?;
-            Ok(Stmt::Message(Message {
-                label: label.to_string(),
-                payload,
-                from,
-                to,
-            }))
-        } else if self
-            .eat_token(TokenType::Keyword(Keyword::Choice))
-            .is_some()
-        {
-            let mut blocks = vec![];
-            blocks.push(self.parse_seq()?);
-            while self.eat_token(TokenType::Keyword(Keyword::Or)).is_some() {
-                blocks.push(self.parse_seq()?);
-            }
-            Ok(Stmt::Choice(blocks))
-        } else if self.eat_token(TokenType::Keyword(Keyword::Par)).is_some() {
-            let mut blocks = vec![];
-            blocks.push(self.parse_seq()?);
-            while self.eat_token(TokenType::Keyword(Keyword::And)).is_some() {
-                blocks.push(self.parse_seq()?);
-            }
-            Ok(Stmt::Par(blocks))
-        } else if self.eat_token(TokenType::Keyword(Keyword::Fin)).is_some() {
-            Ok(Stmt::Fin(self.parse_seq()?))
-        } else if self.eat_token(TokenType::Keyword(Keyword::Inf)).is_some() {
-            Ok(Stmt::Inf(self.parse_seq()?))
-        } else {
-            Err(self.invalid_token())
-        }
-    }
-    fn parse_seq(&mut self) -> ParseResult<'a, Sequence> {
-        self.expect_token(TokenType::Symbol(Symbol::OpenCurlyBrace))?;
-        let mut stmts = vec![];
-        while !self
-            .eat_token(TokenType::Symbol(Symbol::CloseCurlyBrace))
-            .is_some()
-        {
-            stmts.push(self.parse_stmt()?)
-        }
-        Ok(Sequence(stmts))
-    }
-    fn parse_protocol(&mut self) -> ParseResult<'a, ProtocolDef> {
-        self.expect_token(TokenType::Keyword(Keyword::Protocol))?;
-        let name = self.expect_token(TokenType::Ident)?.to_string();
-        let roles = if self
-            .eat_token(TokenType::Symbol(Symbol::OpenBrace))
-            .is_some()
-        {
-            let mut roles = vec![];
-            while !self
-                .eat_token(TokenType::Symbol(Symbol::CloseBrace))
-                .is_some()
-            {
-                self.expect_token(TokenType::Keyword(Keyword::Role))?;
-                roles.push(self.expect_token(TokenType::Ident)?.to_string());
-                if !self.eat_token(TokenType::Symbol(Symbol::Comma)).is_some() {
-                    self.expect_token(TokenType::Symbol(Symbol::CloseBrace))?;
-                    break;
-                }
-            }
-            Some(roles)
-        } else {
-            None
-        };
-
-        let block = self.parse_seq()?;
-        Ok(ProtocolDef { name, roles, block })
-    }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use crate::{
-//         ast::{Message, Program, ProtocolDef, Sequence, Stmt},
-//         token::TokenType,
-//     };
+pub fn parse<'a, T: Parse>(source: &'a str) -> ParseResult<'a, T> {
+    let mut parser = Parser::new(source);
+    let res = T::parse(&mut parser)?;
+    parser.expect_token(TokenType::End)?;
+    Ok(res)
+}
 
-//     use super::{parse, Parser};
-
-//     #[test]
-//     fn test_parse_message() {
-//         let mut parser = Parser::new("init from A to B;");
-//         let stmt = parser.parse_stmt().unwrap();
-//         assert_eq!(
-//             stmt,
-//             Stmt::Message(Message {
-//                 label: "init",
-//                 payload: None,
-//                 from: "A",
-//                 to: "B"
-//             })
-//         );
-//         assert_eq!(parser.token.ty, TokenType::End);
-//     }
-
-//     #[test]
-//     fn test_parse_protocol() {
-//         let ast = parse("protocol Test(role A, role B) {}").unwrap();
-//         assert_eq!(
-//             ast,
-//             Program {
-//                 protocols: vec![ProtocolDef {
-//                     name: "Test",
-//                     roles: Some(vec!["A", "B"]),
-//                     block: Sequence { stmts: vec![] }
-//                 }]
-//             }
-//         )
-//     }
-// }
+pub fn parse_maybe<'a, T: MaybeParse>(source: &'a str) -> ParseResult<'a, Option<T>> {
+    let mut parser = Parser::new(source);
+    let res = T::parse(&mut parser)?;
+    parser.expect_token(TokenType::End)?;
+    Ok(res)
+}
