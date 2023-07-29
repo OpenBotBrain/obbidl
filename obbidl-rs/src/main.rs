@@ -3,14 +3,15 @@ use std::{fs, process::Command};
 use ast::Program;
 use parser::parse;
 
-use crate::{compile::compile_seq, fsm::GraphViz};
+use crate::to_fsm::compile_protocol_def;
 
 mod ast;
-mod compile;
 mod fsm;
+mod generate;
 mod lexer;
 mod parser;
 mod report;
+mod to_fsm;
 mod token;
 
 fn main() {
@@ -23,15 +24,21 @@ fn main() {
         }
     };
 
-    for def in &program.defs {
-        let state_machine = compile_seq(&def.seq);
-        fs::write("output.dot", GraphViz(state_machine).to_string()).unwrap();
+    for protocol in &program.protocols {
+        let protocol = compile_protocol_def(protocol);
+        fs::write(
+            "output/output.dot",
+            protocol.state_machine.graph_viz().to_string(),
+        )
+        .unwrap();
 
         Command::new("dot")
             .arg("-Tsvg")
             .arg("-O")
-            .arg("output.dot")
+            .arg("output/output.dot")
             .status()
             .unwrap();
+
+        open::that("output/output.dot.svg").unwrap();
     }
 }
