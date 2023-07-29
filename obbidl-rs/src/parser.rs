@@ -149,10 +149,3 @@ pub fn parse<'a, T: Parse>(source: &'a str) -> ParseResult<'a, T> {
     parser.expect_token(TokenType::End)?;
     Ok(res)
 }
-
-pub fn parse_maybe<'a, T: Parse>(source: &'a str) -> ParseResult<'a, Option<T>> {
-    let mut parser = Parser::new(source);
-    let res = parser.parse_maybe()?;
-    parser.expect_token(TokenType::End)?;
-    Ok(res)
-}

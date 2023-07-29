@@ -222,26 +222,15 @@ impl Parse for Program {
 
 #[cfg(test)]
 mod tests {
-    use std::fmt;
-
     use crate::{
         ast::{IntSize, Message, Type},
         parser::parse,
+        report::Report,
     };
-
-    fn report<T, E: fmt::Display>(res: Result<T, E>) -> T {
-        match res {
-            Ok(ty) => ty,
-            Err(err) => {
-                println!("{}", err);
-                panic!()
-            }
-        }
-    }
 
     #[test]
     fn test_parse_msg() {
-        let msg = report(parse::<Message>("X from Y to Z;"));
+        let msg = parse::<Message>("X from Y to Z;").report();
         assert_eq!(
             msg,
             Message {
@@ -255,7 +244,7 @@ mod tests {
 
     #[test]
     fn test_parse_msg_payload() {
-        let msg = report(parse::<Message>("X(x: u32) from Y to Z;"));
+        let msg = parse::<Message>("X(x: u32) from Y to Z;").report();
         assert_eq!(
             msg,
             Message {

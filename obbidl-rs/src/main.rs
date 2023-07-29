@@ -10,6 +10,7 @@ mod compile;
 mod fsm;
 mod lexer;
 mod parser;
+mod report;
 mod token;
 
 fn main() {

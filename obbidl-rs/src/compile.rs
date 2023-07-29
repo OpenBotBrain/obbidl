@@ -108,105 +108,102 @@ pub fn generate_transitions(seq: &Sequence) -> Vec<(Message, Sequence)> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        ast::Sequence,
-        parser::{parse, parse_maybe},
-    };
+    use crate::{ast::Sequence, parser::parse, report::Report};
 
     use super::generate_transitions;
 
     #[test]
     fn test_msg_trans() {
-        let seq = parse("{ X from C to S; Y from S to C; }").unwrap();
+        let seq = parse("{ X from C to S; Y from S to C; }").report();
         let trans = generate_transitions(&seq);
 
         assert_eq!(trans.len(), 1);
 
         let (msg, rem_seq) = &trans[0];
-        assert_eq!(msg, &parse_maybe("X from C to S;").unwrap().unwrap());
-        assert_eq!(rem_seq, &parse("{ Y from S to C; }").unwrap());
+        assert_eq!(msg, &parse("X from C to S;").report());
+        assert_eq!(rem_seq, &parse("{ Y from S to C; }").report());
     }
 
     #[test]
     fn test_choice_trans() {
         let seq: Sequence =
-            parse("{ choice { X from C to S; } or { Y from C to S; Z from S to C; } }").unwrap();
+            parse("{ choice { X from C to S; } or { Y from C to S; Z from S to C; } }").report();
         let trans = generate_transitions(&seq);
 
         assert_eq!(trans.len(), 2);
 
         let (msg, rem_seq) = &trans[0];
-        assert_eq!(msg, &parse_maybe("X from C to S;").unwrap().unwrap());
-        assert_eq!(rem_seq, &parse("{ }").unwrap());
+        assert_eq!(msg, &parse("X from C to S;").report());
+        assert_eq!(rem_seq, &parse("{ }").report());
 
         let (msg, rem_seq) = &trans[1];
-        assert_eq!(msg, &parse_maybe("Y from C to S;").unwrap().unwrap());
-        assert_eq!(rem_seq, &parse("{ Z from S to C; }").unwrap());
+        assert_eq!(msg, &parse("Y from C to S;").report());
+        assert_eq!(rem_seq, &parse("{ Z from S to C; }").report());
     }
 
     #[test]
     fn test_par_trans() {
         let seq: Sequence =
             parse("{ par { X from C to S; } and { Y from C to S; } and { Z from C to S; W from S to C; } }")
-                .unwrap();
+                .report();
         let trans = generate_transitions(&seq);
 
         assert_eq!(trans.len(), 3);
 
         let (msg, rem_seq) = &trans[0];
-        assert_eq!(msg, &parse_maybe("X from C to S;").unwrap().unwrap());
+        assert_eq!(msg, &parse("X from C to S;").report());
         assert_eq!(
             rem_seq,
             &parse("{ par {} and { Y from C to S; } and { Z from C to S; W from S to C; } }")
-                .unwrap()
+                .report()
         );
 
         let (msg, rem_seq) = &trans[1];
-        assert_eq!(msg, &parse_maybe("Y from C to S;").unwrap().unwrap());
+        assert_eq!(msg, &parse("Y from C to S;").report());
         assert_eq!(
             rem_seq,
             &parse("{ par { X from C to S; } and {} and { Z from C to S; W from S to C; } }")
-                .unwrap()
+                .report()
         );
 
         let (msg, rem_seq) = &trans[2];
-        assert_eq!(msg, &parse_maybe("Z from C to S;").unwrap().unwrap());
+        assert_eq!(msg, &parse("Z from C to S;").report());
         assert_eq!(
             rem_seq,
             &parse("{ par { X from C to S; } and { Y from C to S; } and { W from S to C; } }")
-                .unwrap()
+                .report()
         );
     }
 
     #[test]
     fn test_inf_trans() {
-        let seq: Sequence = parse("{ inf { X from C to S; Y from S to C; } }").unwrap();
+        let seq: Sequence = parse("{ inf { X from C to S; Y from S to C; } }").report();
         let trans = generate_transitions(&seq);
 
         let (msg, rem_seq) = &trans[0];
-        assert_eq!(msg, &parse_maybe("X from C to S;").unwrap().unwrap());
+        assert_eq!(msg, &parse("X from C to S;").report());
         assert_eq!(
             rem_seq,
-            &parse("{ Y from S to C; inf { X from C to S; Y from S to C; } }").unwrap()
+            &parse("{ Y from S to C; inf { X from C to S; Y from S to C; } }").report()
         );
     }
 
     #[test]
     fn test_fin_trans() {
         let seq: Sequence =
-            parse("{ fin { X from C to S; Y from C to S; } Z from C to S; }").unwrap();
+            parse("{ fin { X from C to S; Y from C to S; } Z from C to S; }").report();
         let trans = generate_transitions(&seq);
 
         let (msg, rem_seq) = &trans[0];
-        assert_eq!(msg, &parse_maybe("X from C to S;").unwrap().unwrap());
+        assert_eq!(msg, &parse("X from C to S;").report());
         assert_eq!(
             rem_seq,
             &parse("{ Y from C to S; fin { X from C to S; Y from C to S; } Z from C to S; }")
-                .unwrap()
+                .report()
         );
 
         let (msg, rem_seq) = &trans[1];
-        assert_eq!(msg, &parse_maybe("Z from C to S;").unwrap().unwrap());
-        assert_eq!(rem_seq, &parse("{ }").unwrap());
+        assert_eq!(msg, &parse("Z from C to S;").report());
+        assert_eq!(rem_seq, &parse("{ }").report());
     }
 }
