@@ -1,5 +1,6 @@
 use std::{fs, process::Command};
 
+use ast::Program;
 use parser::parse;
 
 use crate::{compile::compile_seq, fsm::GraphViz};
@@ -13,7 +14,7 @@ mod token;
 
 fn main() {
     let source = fs::read_to_string("example.txt").unwrap();
-    let seq = match parse(&source) {
+    let program = match parse::<Program>(&source) {
         Ok(ast) => ast,
         Err(err) => {
             println!("{}", err);
@@ -21,14 +22,15 @@ fn main() {
         }
     };
 
-    let state_machine = compile_seq(&seq);
+    for def in &program.defs {
+        let state_machine = compile_seq(&def.seq);
+        fs::write("output.dot", GraphViz(state_machine).to_string()).unwrap();
 
-    fs::write("output.dot", GraphViz(state_machine).to_string()).unwrap();
-
-    Command::new("dot")
-        .arg("-Tsvg")
-        .arg("-O")
-        .arg("output.dot")
-        .status()
-        .unwrap();
+        Command::new("dot")
+            .arg("-Tsvg")
+            .arg("-O")
+            .arg("output.dot")
+            .status()
+            .unwrap();
+    }
 }

@@ -77,13 +77,6 @@ where
     fn parse<'a>(parser: &mut Parser<'a>) -> ParseResult<'a, Self>;
 }
 
-pub trait MaybeParse
-where
-    Self: Sized,
-{
-    fn parse<'a>(parser: &mut Parser<'a>) -> ParseResult<'a, Option<Self>>;
-}
-
 impl<'a> Parser<'a> {
     pub fn new(source: &'a str) -> Parser<'a> {
         let mut lexer = Lexer::new(source);
@@ -136,18 +129,30 @@ impl<'a> Parser<'a> {
             token: self.token,
         }
     }
+    pub fn parse<T: Parse>(&mut self) -> ParseResult<'a, T> {
+        T::parse(self)
+    }
+    pub fn parse_maybe<T: Parse>(&mut self) -> ParseResult<'a, Option<T>> {
+        let start = self.lexer.offset;
+        let res = T::parse(self);
+        match res {
+            Ok(res) => Ok(Some(res)),
+            Err(_) if self.lexer.offset == start => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
 }
 
 pub fn parse<'a, T: Parse>(source: &'a str) -> ParseResult<'a, T> {
     let mut parser = Parser::new(source);
-    let res = T::parse(&mut parser)?;
+    let res = parser.parse()?;
     parser.expect_token(TokenType::End)?;
     Ok(res)
 }
 
-pub fn parse_maybe<'a, T: MaybeParse>(source: &'a str) -> ParseResult<'a, Option<T>> {
+pub fn parse_maybe<'a, T: Parse>(source: &'a str) -> ParseResult<'a, Option<T>> {
     let mut parser = Parser::new(source);
-    let res = T::parse(&mut parser)?;
+    let res = parser.parse_maybe()?;
     parser.expect_token(TokenType::End)?;
     Ok(res)
 }

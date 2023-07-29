@@ -1,0 +1,13 @@
+digraph {
+  1 -> 3[label="W"];
+  0 -> 1[label="Y"];
+  0 -> 1[label="V"];
+  2 -> 2[label="X"];
+  0 -> 0[label="X"];
+  2 -> 3[label="Y"];
+  0 -> 2[label="W"];
+  1 -> 1[label="X"];
+  2 -> 3[label="V"];
+  3 -> 3[label="X"];
+  3 -> 4[label="Z"];
+}

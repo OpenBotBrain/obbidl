@@ -1,7 +1,7 @@
 use std::hash::Hash;
 
 use crate::{
-    parser::{MaybeParse, Parse, ParseResult},
+    parser::{Parse, ParseResult},
     token::{Keyword, Symbol, TokenType},
 };
 
@@ -9,7 +9,7 @@ use crate::{
 pub struct ProtocolDef {
     pub name: String,
     pub roles: Option<Vec<String>>,
-    pub block: Sequence,
+    pub seq: Sequence,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -62,24 +62,24 @@ pub enum IntSize {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
-    pub protocols: Vec<ProtocolDef>,
+    pub defs: Vec<ProtocolDef>,
 }
 
-impl MaybeParse for Message {
-    fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Option<Self>> {
+impl Parse for Message {
+    fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
         if let Some(label) = parser.eat_token(TokenType::Ident) {
             let payload = if parser
                 .eat_token(TokenType::Symbol(Symbol::OpenBrace))
                 .is_some()
             {
                 let mut payload = vec![];
-                while !parser
+                while parser
                     .eat_token(TokenType::Symbol(Symbol::CloseBrace))
-                    .is_some()
+                    .is_none()
                 {
                     let name = parser.expect_token(TokenType::Ident)?;
                     parser.expect_token(TokenType::Symbol(Symbol::Colon))?;
-                    let ty = Type::parse(parser)?;
+                    let ty = parser.parse()?;
                     payload.push((name.to_string(), ty));
                     if !parser.eat_token(TokenType::Symbol(Symbol::Comma)).is_some() {
                         parser.expect_token(TokenType::Symbol(Symbol::CloseBrace))?;
@@ -95,14 +95,14 @@ impl MaybeParse for Message {
             parser.expect_token(TokenType::Keyword(Keyword::To))?;
             let to = parser.expect_token(TokenType::Ident)?.to_string();
             parser.expect_token(TokenType::Symbol(Symbol::Semicolon))?;
-            Ok(Some(Message {
+            Ok(Message {
                 label: label.to_string(),
                 payload,
                 from,
                 to,
-            }))
+            })
         } else {
-            Ok(None)
+            Err(parser.invalid_token())
         }
     }
 }
@@ -137,7 +137,7 @@ impl Parse for Type {
 
 impl Parse for Stmt {
     fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
-        if let Some(msg) = Message::parse(parser)? {
+        if let Some(msg) = parser.parse_maybe()? {
             Ok(Stmt::Message(msg))
         } else if parser
             .eat_token(TokenType::Keyword(Keyword::Choice))
@@ -146,20 +146,20 @@ impl Parse for Stmt {
             let mut blocks = vec![];
             blocks.push(Sequence::parse(parser)?);
             while parser.eat_token(TokenType::Keyword(Keyword::Or)).is_some() {
-                blocks.push(Sequence::parse(parser)?);
+                blocks.push(parser.parse()?);
             }
             Ok(Stmt::Choice(blocks))
         } else if parser.eat_token(TokenType::Keyword(Keyword::Par)).is_some() {
             let mut blocks = vec![];
-            blocks.push(Sequence::parse(parser)?);
+            blocks.push(parser.parse()?);
             while parser.eat_token(TokenType::Keyword(Keyword::And)).is_some() {
-                blocks.push(Sequence::parse(parser)?);
+                blocks.push(parser.parse()?);
             }
             Ok(Stmt::Par(blocks))
         } else if parser.eat_token(TokenType::Keyword(Keyword::Fin)).is_some() {
-            Ok(Stmt::Fin(Sequence::parse(parser)?))
+            Ok(Stmt::Fin(parser.parse()?))
         } else if parser.eat_token(TokenType::Keyword(Keyword::Inf)).is_some() {
-            Ok(Stmt::Inf(Sequence::parse(parser)?))
+            Ok(Stmt::Inf(parser.parse()?))
         } else {
             Err(parser.invalid_token())
         }
@@ -170,11 +170,11 @@ impl Parse for Sequence {
     fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
         parser.expect_token(TokenType::Symbol(Symbol::OpenCurlyBrace))?;
         let mut stmts = vec![];
-        while !parser
+        while parser
             .eat_token(TokenType::Symbol(Symbol::CloseCurlyBrace))
-            .is_some()
+            .is_none()
         {
-            stmts.push(Stmt::parse(parser)?)
+            stmts.push(parser.parse()?)
         }
         Ok(Sequence(stmts))
     }
@@ -189,9 +189,9 @@ impl Parse for ProtocolDef {
             .is_some()
         {
             let mut roles = vec![];
-            while !parser
+            while parser
                 .eat_token(TokenType::Symbol(Symbol::CloseBrace))
-                .is_some()
+                .is_none()
             {
                 parser.expect_token(TokenType::Keyword(Keyword::Role))?;
                 roles.push(parser.expect_token(TokenType::Ident)?.to_string());
@@ -205,7 +205,71 @@ impl Parse for ProtocolDef {
             None
         };
 
-        let block = Sequence::parse(parser)?;
-        Ok(ProtocolDef { name, roles, block })
+        let seq = parser.parse()?;
+        Ok(ProtocolDef { name, roles, seq })
+    }
+}
+
+impl Parse for Program {
+    fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
+        let mut defs = vec![];
+        while parser.eat_token(TokenType::End).is_none() {
+            defs.push(parser.parse()?)
+        }
+        Ok(Program { defs })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fmt;
+
+    use crate::{
+        ast::{IntSize, Message, Type},
+        parser::parse,
+    };
+
+    fn report<T, E: fmt::Display>(res: Result<T, E>) -> T {
+        match res {
+            Ok(ty) => ty,
+            Err(err) => {
+                println!("{}", err);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_msg() {
+        let msg = report(parse::<Message>("X from Y to Z;"));
+        assert_eq!(
+            msg,
+            Message {
+                label: "X".to_string(),
+                payload: None,
+                from: "Y".to_string(),
+                to: "Z".to_string(),
+            }
+        )
+    }
+
+    #[test]
+    fn test_parse_msg_payload() {
+        let msg = report(parse::<Message>("X(x: u32) from Y to Z;"));
+        assert_eq!(
+            msg,
+            Message {
+                label: "X".to_string(),
+                payload: Some(vec![(
+                    "x".to_string(),
+                    Type::Int {
+                        signed: false,
+                        size: IntSize::B32
+                    }
+                )]),
+                from: "Y".to_string(),
+                to: "Z".to_string(),
+            }
+        )
     }
 }

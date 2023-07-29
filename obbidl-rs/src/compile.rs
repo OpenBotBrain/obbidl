@@ -35,12 +35,7 @@ pub fn compile_seq(seq: &Sequence) -> StateMachine {
 }
 
 fn seq_may_terminate(seq: &Sequence) -> bool {
-    for stmt in &seq.0 {
-        if !stmt_may_terminate(stmt) {
-            return false;
-        }
-    }
-    true
+    seq.0.iter().all(stmt_may_terminate)
 }
 
 fn stmt_may_terminate(stmt: &Stmt) -> bool {
