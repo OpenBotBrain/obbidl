@@ -1,18 +1,26 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::{
-    ast::{Message, Sequence, Stmt},
+    ast::{Message, Protocol, Sequence, Stmt},
     fsm::{StateMachine, Transistion},
 };
 
-pub fn compile_seq(seq: &Sequence) -> StateMachine {
+pub struct ProtocolStateMachine {
+    pub name: String,
+    pub roles: Vec<String>,
+    pub state_machine: StateMachine,
+}
+
+static DEFAULT_ROLES: &[&str] = &["C", "S"];
+
+pub fn compile_protocol_def(protocol: &Protocol) -> ProtocolStateMachine {
     let mut state_machine = StateMachine::new();
     let mut states = HashMap::new();
     let mut queue = VecDeque::new();
 
     let start = state_machine.new_state();
-    queue.push_front((seq.clone(), start));
-    states.insert(seq.clone(), start);
+    queue.push_front((protocol.seq.clone(), start));
+    states.insert(protocol.seq.clone(), start);
 
     while let Some((seq, start)) = queue.pop_back() {
         for (msg, seq) in generate_transitions(&seq) {
@@ -31,7 +39,14 @@ pub fn compile_seq(seq: &Sequence) -> StateMachine {
         }
     }
 
-    state_machine
+    ProtocolStateMachine {
+        name: protocol.name.clone(),
+        roles: protocol
+            .roles
+            .clone()
+            .unwrap_or_else(|| DEFAULT_ROLES.iter().map(|role| role.to_string()).collect()),
+        state_machine,
+    }
 }
 
 fn seq_may_terminate(seq: &Sequence) -> bool {
