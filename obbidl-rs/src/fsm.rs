@@ -1,6 +1,6 @@
 use std::{collections::HashSet, fmt, hash};
 
-use crate::ast::Type;
+use crate::ast::Payload;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct State(u32);
@@ -10,7 +10,7 @@ pub struct Transistion {
     pub start: State,
     pub end: State,
     pub label: String,
-    pub payload: Option<Vec<(String, Type)>>,
+    pub payload: Payload,
 }
 
 #[derive(Debug, Clone)]
@@ -64,12 +64,15 @@ impl StateMachine {
     pub fn iter_states(&self) -> impl Iterator<Item = State> + '_ {
         (0..self.state_count).map(|id| State(id))
     }
+    pub fn graph_viz(&self) -> GraphViz {
+        GraphViz(self)
+    }
 }
 
 #[derive(Debug, Clone)]
-pub struct GraphViz(pub StateMachine);
+pub struct GraphViz<'a>(&'a StateMachine);
 
-impl fmt::Display for GraphViz {
+impl<'a> fmt::Display for GraphViz<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "digraph {{")?;
         for trans in self.0.iter_transitions() {
@@ -81,5 +84,19 @@ impl fmt::Display for GraphViz {
         }
         writeln!(f, "}}")?;
         Ok(())
+    }
+}
+
+pub struct StateName(State);
+
+impl State {
+    pub fn name(&self) -> StateName {
+        StateName(*self)
+    }
+}
+
+impl fmt::Display for StateName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "S{}", self.0 .0)
     }
 }

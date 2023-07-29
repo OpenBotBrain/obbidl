@@ -6,7 +6,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ProtocolDef {
+pub struct Protocol {
     pub name: String,
     pub roles: Option<Vec<String>>,
     pub seq: Sequence,
@@ -27,7 +27,7 @@ pub enum Stmt {
 #[derive(Debug, Clone)]
 pub struct Message {
     pub label: String,
-    pub payload: Option<Vec<(String, Type)>>,
+    pub payload: Payload,
     pub from: String,
     pub to: String,
 }
@@ -62,7 +62,38 @@ pub enum IntSize {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
-    pub defs: Vec<ProtocolDef>,
+    pub protocols: Vec<Protocol>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Payload {
+    items: Vec<(String, Type)>,
+}
+
+impl Payload {
+    pub fn empty() -> Payload {
+        Payload { items: vec![] }
+    }
+}
+
+impl Parse for Payload {
+    fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
+        let mut items = vec![];
+        while parser
+            .eat_token(TokenType::Symbol(Symbol::CloseBrace))
+            .is_none()
+        {
+            let name = parser.expect_token(TokenType::Ident)?;
+            parser.expect_token(TokenType::Symbol(Symbol::Colon))?;
+            let ty = parser.parse()?;
+            items.push((name.to_string(), ty));
+            if !parser.eat_token(TokenType::Symbol(Symbol::Comma)).is_some() {
+                parser.expect_token(TokenType::Symbol(Symbol::CloseBrace))?;
+                break;
+            }
+        }
+        Ok(Payload { items })
+    }
 }
 
 impl Parse for Message {
@@ -72,23 +103,9 @@ impl Parse for Message {
                 .eat_token(TokenType::Symbol(Symbol::OpenBrace))
                 .is_some()
             {
-                let mut payload = vec![];
-                while parser
-                    .eat_token(TokenType::Symbol(Symbol::CloseBrace))
-                    .is_none()
-                {
-                    let name = parser.expect_token(TokenType::Ident)?;
-                    parser.expect_token(TokenType::Symbol(Symbol::Colon))?;
-                    let ty = parser.parse()?;
-                    payload.push((name.to_string(), ty));
-                    if !parser.eat_token(TokenType::Symbol(Symbol::Comma)).is_some() {
-                        parser.expect_token(TokenType::Symbol(Symbol::CloseBrace))?;
-                        break;
-                    }
-                }
-                Some(payload)
+                parser.parse()?
             } else {
-                None
+                Payload::empty()
             };
             parser.expect_token(TokenType::Keyword(Keyword::From))?;
             let from = parser.expect_token(TokenType::Ident)?.to_string();
@@ -180,7 +197,7 @@ impl Parse for Sequence {
     }
 }
 
-impl Parse for ProtocolDef {
+impl Parse for Protocol {
     fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
         parser.expect_token(TokenType::Keyword(Keyword::Protocol))?;
         let name = parser.expect_token(TokenType::Ident)?.to_string();
@@ -206,7 +223,7 @@ impl Parse for ProtocolDef {
         };
 
         let seq = parser.parse()?;
-        Ok(ProtocolDef { name, roles, seq })
+        Ok(Protocol { name, roles, seq })
     }
 }
 
@@ -216,14 +233,14 @@ impl Parse for Program {
         while parser.eat_token(TokenType::End).is_none() {
             defs.push(parser.parse()?)
         }
-        Ok(Program { defs })
+        Ok(Program { protocols: defs })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        ast::{IntSize, Message, Type},
+        ast::{IntSize, Message, Payload, Type},
         parser::parse,
         report::Report,
     };
@@ -235,7 +252,7 @@ mod tests {
             msg,
             Message {
                 label: "X".to_string(),
-                payload: None,
+                payload: Payload::empty(),
                 from: "Y".to_string(),
                 to: "Z".to_string(),
             }
@@ -249,13 +266,15 @@ mod tests {
             msg,
             Message {
                 label: "X".to_string(),
-                payload: Some(vec![(
-                    "x".to_string(),
-                    Type::Int {
-                        signed: false,
-                        size: IntSize::B32
-                    }
-                )]),
+                payload: Payload {
+                    items: vec![(
+                        "x".to_string(),
+                        Type::Int {
+                            signed: false,
+                            size: IntSize::B32
+                        }
+                    )]
+                },
                 from: "Y".to_string(),
                 to: "Z".to_string(),
             }

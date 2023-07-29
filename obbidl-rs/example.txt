@@ -1,4 +1,4 @@
-protocol test(role C, rol S) {
+protocol test(role C, role S) {
     par {
         fin {
             X from C to S;
