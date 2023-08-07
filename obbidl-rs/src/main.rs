@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, process::Command};
 
 use ast::{Program, Role};
 use generate::generate_rust_bindings;
@@ -27,7 +27,8 @@ fn main() {
 
     for protocol in &program.protocols {
         let protocol = compile_protocol_def(protocol);
-        let output = generate_rust_bindings(protocol, Role::new("C"), Role::new("S".to_string()));
+        let output = generate_rust_bindings(&protocol, Role::new("S"), Role::new("C"));
+
         fs::write("output/output.rs", &output).unwrap();
 
         // fs::write(

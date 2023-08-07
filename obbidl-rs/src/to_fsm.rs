@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::{
-    ast::{Message, Protocol, Role, Sequence, Stmt},
+    ast::{Message, Protocol, Role, Sequence, Sequences, Stmt},
     fsm::{StateMachine, Transition},
 };
 
@@ -54,8 +54,8 @@ fn seq_may_terminate(seq: &Sequence) -> bool {
 fn stmt_may_terminate(stmt: &Stmt) -> bool {
     match stmt {
         Stmt::Message(_) => false,
-        Stmt::Choice(seqs) => seqs.iter().any(seq_may_terminate),
-        Stmt::Par(seqs) => seqs.iter().all(seq_may_terminate),
+        Stmt::Choice(seqs) => seqs.0.iter().any(seq_may_terminate),
+        Stmt::Par(seqs) => seqs.0.iter().all(seq_may_terminate),
         Stmt::Fin(_) => true,
         Stmt::Inf(_) => false,
     }
@@ -68,26 +68,31 @@ pub fn generate_transitions(seq: &Sequence) -> Vec<(Message, Sequence)> {
     };
     let mut trans = vec![];
     match stmt {
-        Stmt::Message(msg) => trans.push((msg.clone(), Sequence(iter.clone().cloned().collect()))),
+        // Stmt::Message(msg) => trans.push((msg.clone(), Sequence(iter.clone().cloned().collect()))),
+        Stmt::Message(msg) => trans.push((msg.clone(), Sequence(vec![]))),
         Stmt::Choice(seqs) => {
-            for seq in seqs {
+            for seq in &seqs.0 {
                 for (msg, rem_seq) in generate_transitions(seq) {
-                    trans.push((msg, rem_seq))
+                    trans.push((msg, Sequence(rem_seq.0.clone())))
                 }
             }
         }
         Stmt::Par(seqs) => {
-            for (i, seq) in seqs.iter().enumerate() {
+            for (i, seq) in seqs.0.iter().enumerate() {
                 for (msg, rem_seq) in generate_transitions(seq) {
                     let mut new_seqs = vec![];
-                    new_seqs.extend(seqs.iter().take(i).cloned());
+                    new_seqs.extend(seqs.0.iter().take(i).cloned());
                     new_seqs.push(rem_seq);
-                    new_seqs.extend(seqs.iter().rev().take(seqs.len() - i - 1).rev().cloned());
+                    new_seqs.extend(
+                        seqs.0
+                            .iter()
+                            .rev()
+                            .take(seqs.0.len() - i - 1)
+                            .rev()
+                            .cloned(),
+                    );
 
-                    let mut stmts = vec![Stmt::Par(new_seqs)];
-                    stmts.extend(iter.clone().cloned());
-
-                    trans.push((msg, Sequence(stmts)))
+                    trans.push((msg, Sequence(vec![Stmt::Par(Sequences(new_seqs))])))
                 }
             }
         }
@@ -96,7 +101,6 @@ pub fn generate_transitions(seq: &Sequence) -> Vec<(Message, Sequence)> {
                 let mut stmts = vec![];
                 stmts.extend(rem_seq.0);
                 stmts.push(Stmt::Inf(seq.clone()));
-                stmts.extend(iter.clone().cloned());
                 trans.push((msg, Sequence(stmts)))
             }
         }
@@ -105,18 +109,24 @@ pub fn generate_transitions(seq: &Sequence) -> Vec<(Message, Sequence)> {
                 let mut stmts = vec![];
                 stmts.extend(rem_seq.0);
                 stmts.push(Stmt::Fin(seq.clone()));
-                stmts.extend(iter.clone().cloned());
                 trans.push((msg, Sequence(stmts)));
             }
         }
     }
+    let mut final_trans = vec![];
+    for (msg, seq) in trans {
+        let mut stmts = vec![];
+        stmts.extend(seq.0);
+        stmts.extend(iter.clone().cloned());
+        final_trans.push((msg, Sequence(stmts)));
+    }
     if stmt_may_terminate(stmt) {
-        let rem_seq = Sequence(iter.cloned().collect());
+        let rem_seq = Sequence(iter.clone().cloned().collect());
         for (msg, rem_seq) in generate_transitions(&rem_seq) {
-            trans.push((msg, rem_seq))
+            final_trans.push((msg, rem_seq))
         }
     }
-    trans
+    final_trans
 }
 
 #[cfg(test)]
@@ -124,6 +134,22 @@ mod tests {
     use crate::{ast::Sequence, parser::parse, report::Report};
 
     use super::generate_transitions;
+
+    #[test]
+    fn test_empty_choice() {
+        let seq = parse("{ choice { X from C to S; } or { } Y from C to S; }").report();
+        let trans = generate_transitions(&seq);
+
+        assert_eq!(trans.len(), 2);
+
+        let (msg, rem_seq) = &trans[0];
+        assert_eq!(msg, &parse("X from C to S;").report());
+        assert_eq!(rem_seq, &parse("{ Y from C to S; }").report());
+
+        let (msg, rem_seq) = &trans[1];
+        assert_eq!(msg, &parse("Y from C to S;").report());
+        assert_eq!(rem_seq, &parse("{ }").report());
+    }
 
     #[test]
     fn test_msg_trans() {

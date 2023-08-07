@@ -1,4 +1,7 @@
-use std::hash::Hash;
+use std::{
+    collections::{hash_map::DefaultHasher, HashSet},
+    hash::{Hash, Hasher},
+};
 
 use crate::{
     parser::{Parse, ParseResult},
@@ -18,11 +21,34 @@ pub struct Sequence(pub Vec<Stmt>);
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Stmt {
     Message(Message),
-    Par(Vec<Sequence>),
-    Choice(Vec<Sequence>),
+    Par(Sequences),
+    Choice(Sequences),
     Fin(Sequence),
     Inf(Sequence),
 }
+
+#[derive(Debug, Clone)]
+pub struct Sequences(pub Vec<Sequence>);
+
+impl PartialEq for Sequences {
+    fn eq(&self, other: &Self) -> bool {
+        HashSet::<_>::from_iter(self.0.iter()) == HashSet::from_iter(other.0.iter())
+    }
+}
+
+impl Hash for Sequences {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let mut total = 0;
+        for item in &self.0 {
+            let mut hasher = DefaultHasher::new();
+            item.hash(&mut hasher);
+            total ^= hasher.finish();
+        }
+        total.hash(state);
+    }
+}
+
+impl Eq for Sequences {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Message {
@@ -54,7 +80,7 @@ pub struct Program {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Payload {
-    items: Vec<(String, Type)>,
+    pub items: Vec<(String, Type)>,
 }
 
 impl Payload {
@@ -164,14 +190,14 @@ impl Parse for Stmt {
             while parser.eat_token(TokenType::Keyword(Keyword::Or)).is_some() {
                 blocks.push(parser.parse()?);
             }
-            Ok(Stmt::Choice(blocks))
+            Ok(Stmt::Choice(Sequences(blocks)))
         } else if parser.eat_token(TokenType::Keyword(Keyword::Par)).is_some() {
             let mut blocks = vec![];
             blocks.push(parser.parse()?);
             while parser.eat_token(TokenType::Keyword(Keyword::And)).is_some() {
                 blocks.push(parser.parse()?);
             }
-            Ok(Stmt::Par(blocks))
+            Ok(Stmt::Par(Sequences(blocks)))
         } else if parser.eat_token(TokenType::Keyword(Keyword::Fin)).is_some() {
             Ok(Stmt::Fin(parser.parse()?))
         } else if parser.eat_token(TokenType::Keyword(Keyword::Inf)).is_some() {

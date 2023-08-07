@@ -1,6 +1,6 @@
-use std::{collections::HashSet, fmt, hash};
+use std::fmt;
 
-use crate::ast::{Message, Payload, Role};
+use crate::ast::Message;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct State(u32);

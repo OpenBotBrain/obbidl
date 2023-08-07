@@ -1,4 +1,8 @@
 protocol test(role C, role S) {
-    X from C to S;
-    Y from S to C;
+    choice {
+        x(a: u32) from C to S;
+    } or {
+        y(b: i32) from C to S;
+    }
+    z(c: bool) from S to C;
 }

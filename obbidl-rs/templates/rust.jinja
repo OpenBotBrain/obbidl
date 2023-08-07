@@ -1,0 +1,76 @@
+{% macro params(payload) %}
+    {% for (name, ty) in payload.items %}
+        {{name}}:
+        {% match ty %}
+            {% when Bool %}
+            bool
+            {% when String %}
+            &str
+            {% when Type::Int with { signed, size } %}
+            {% if signed %}i{% else %}u{% endif %}
+            {% match size %}
+            {% when B8 %} 8
+            {% when B16 %} 16
+            {% when B32 %} 32
+            {% when B64 %} 64
+            {% endmatch %}
+        {% endmatch %},
+    {% endfor %}
+{% endmacro %}
+
+trait Channel {
+    type Error;
+
+    fn recv(&mut self, data: &mut [u8]) -> Result<(), Self::Error>;
+    fn send(&mut self, data: &[u8]) -> Result<(), Self::Error>;
+
+    fn recv_u8(&mut self) -> Result<u8, Self::Error> {
+        let mut data = [0; 1];
+        self.recv(&mut data)?;
+        Ok(data[0])
+    }
+    fn send_u8(&mut self, data: u8) -> Result<(), Self::Error> {
+        self.send(&[data])
+    }
+}
+
+{% for state in states %}
+
+struct {{ state.name }}<C: Channel>(C);
+
+{% if state.dir == Direction::Recv %}
+
+type {{ state.name }}Result = ();
+
+impl<C: Channel<Error = E>, E> {{ state.name }}<C> {
+
+    fn recv(self) -> Result<{{ state.name }}Result, E> {
+        {% for msg in state.messages %}
+        if self.0.recv_u8()? == {{ msg.label }} {
+            Ok(self.recv_{{ msg.label }}({{ msg.dest_state_name }}(self.0)))
+        }
+        {% endfor %}
+    }
+
+    {% for msg in state.messages %}
+    fn recv_{{ msg.label }}(self, state: {{ msg.dest_state_name }}, {% call params(msg.payload) %}) -> {{ state.name }}Result {
+        todo!()
+    }
+    {% endfor %}
+
+}
+
+{% endif %}
+
+{% if state.dir == Direction::Send %}
+impl<C: Channel<Error = E>, E> {{ state.name }}<C> {
+    {% for msg in state.messages %}
+    fn send_{{ msg.label }}(self, {% call params(msg.payload) %}) -> Result<{{ msg.dest_state_name }}, E> {
+        self.0.send_u8({{ msg.label }})?;
+        {{ msg.dest_state_name }}(self.0)
+    }
+    {% endfor %}
+}
+{% endif %}
+
+{% endfor %}

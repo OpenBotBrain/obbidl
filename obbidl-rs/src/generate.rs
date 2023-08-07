@@ -1,25 +1,22 @@
 use askama::Template;
 
 use crate::{
-    ast::{Payload, Role},
+    ast::{Payload, Role, Type},
     fsm::StateName,
     to_fsm::ProtocolStateMachine,
 };
 
 #[derive(Debug, Clone, Template)]
-#[template(path = "rust.j2")]
+#[template(path = "rust.jinja")]
 struct RustTemplate {
     states: Vec<State>,
 }
 
 #[derive(Debug, Clone)]
-enum State {
-    End,
-    Intermediate {
-        name: StateName,
-        dir: Direction,
-        messages: Vec<Message>,
-    },
+struct State {
+    name: StateName,
+    dir: Direction,
+    messages: Vec<Message>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -35,7 +32,7 @@ struct Message {
     dest_state_name: StateName,
 }
 
-pub fn generate_rust_bindings(protocol: ProtocolStateMachine, you: Role, other: Role) -> String {
+pub fn generate_rust_bindings(protocol: &ProtocolStateMachine, you: Role, other: Role) -> String {
     let mut states = vec![];
 
     for state in protocol.state_machine.iter_states() {
@@ -52,18 +49,27 @@ pub fn generate_rust_bindings(protocol: ProtocolStateMachine, you: Role, other: 
                 }
             });
 
-        states.push(let Some(dir) = dir_iter.next() {
+        if let Some(dir) = dir_iter.next() {
             if !dir_iter.all(|d| d == dir) {
                 panic!()
             }
-            State::Intermediate {
+
+            let messages = protocol
+                .state_machine
+                .iter_trans_from(state)
+                .map(|(msg, state)| Message {
+                    label: msg.label.clone(),
+                    payload: msg.payload.clone(),
+                    dest_state_name: state.name(),
+                })
+                .collect();
+
+            states.push(State {
                 name: state.name(),
                 dir,
                 messages,
-            }
-        } else {
-            State::End
-        })
+            })
+        }
     }
 
     RustTemplate { states }.render().unwrap()
