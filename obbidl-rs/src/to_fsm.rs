@@ -1,17 +1,18 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::{
-    ast::{Message, Protocol, Sequence, Stmt},
-    fsm::{StateMachine, Transistion},
+    ast::{Message, Protocol, Role, Sequence, Stmt},
+    fsm::{StateMachine, Transition},
 };
 
+#[derive(Debug, Clone)]
 pub struct ProtocolStateMachine {
     pub name: String,
-    pub roles: Vec<String>,
+    pub roles: Vec<Role>,
     pub state_machine: StateMachine,
 }
 
-static DEFAULT_ROLES: &[&str] = &["C", "S"];
+const DEFAULT_ROLES: &[&str] = &["C", "S"];
 
 pub fn compile_protocol_def(protocol: &Protocol) -> ProtocolStateMachine {
     let mut state_machine = StateMachine::new();
@@ -30,21 +31,18 @@ pub fn compile_protocol_def(protocol: &Protocol) -> ProtocolStateMachine {
                 state
             });
 
-            state_machine.add_transition(Transistion {
-                start,
-                end,
-                label: msg.label,
-                payload: msg.payload,
-            })
+            state_machine.add_transition(Transition { start, end, msg })
         }
     }
 
     ProtocolStateMachine {
         name: protocol.name.clone(),
-        roles: protocol
-            .roles
-            .clone()
-            .unwrap_or_else(|| DEFAULT_ROLES.iter().map(|role| role.to_string()).collect()),
+        roles: protocol.roles.clone().unwrap_or_else(|| {
+            DEFAULT_ROLES
+                .iter()
+                .map(|role| Role(role.to_string()))
+                .collect()
+        }),
         state_machine,
     }
 }

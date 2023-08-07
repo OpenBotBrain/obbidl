@@ -1,16 +1,4 @@
 protocol test(role C, role S) {
-    par {
-        fin {
-            X from C to S;
-        }
-    } and {
-        choice {
-            Y from C to S;
-        } or {
-            V from C to S;
-        }
-    } and {
-        W from C to S;
-    }
-    Z from C to S;
+    X from C to S;
+    Y from S to C;
 }

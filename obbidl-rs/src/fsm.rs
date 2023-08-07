@@ -1,45 +1,36 @@
 use std::{collections::HashSet, fmt, hash};
 
-use crate::ast::Payload;
+use crate::ast::{Message, Payload, Role};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct State(u32);
 
 #[derive(Debug, Clone)]
-pub struct Transistion {
+pub struct Transition {
     pub start: State,
     pub end: State,
-    pub label: String,
-    pub payload: Payload,
+    pub msg: Message,
 }
 
 #[derive(Debug, Clone)]
 pub struct StateMachine {
     state_count: u32,
-    transitions: HashSet<Transistion>,
+    transitions: Vec<Transition>,
 }
 
-impl PartialEq for Transistion {
+impl PartialEq for Transition {
     fn eq(&self, other: &Self) -> bool {
-        self.start == other.start && self.end == other.end && self.label == other.label
+        self.start == other.start && self.end == other.end && self.msg.label == other.msg.label
     }
 }
 
-impl hash::Hash for Transistion {
-    fn hash<H: hash::Hasher>(&self, state: &mut H) {
-        self.start.hash(state);
-        self.end.hash(state);
-        self.label.hash(state);
-    }
-}
-
-impl Eq for Transistion {}
+impl Eq for Transition {}
 
 impl StateMachine {
     pub fn new() -> StateMachine {
         StateMachine {
             state_count: 0,
-            transitions: HashSet::new(),
+            transitions: vec![],
         }
     }
     pub fn new_state(&mut self) -> State {
@@ -49,20 +40,29 @@ impl StateMachine {
     pub fn contains_state(&self, state: State) -> bool {
         state.0 < self.state_count
     }
-    pub fn add_transition(&mut self, transistion: Transistion) {
-        if !self.contains_state(transistion.start) {
+    pub fn add_transition(&mut self, transition: Transition) {
+        if !self.contains_state(transition.start) {
             panic!()
         }
-        if !self.contains_state(transistion.end) {
+        if !self.contains_state(transition.end) {
             panic!()
         }
-        self.transitions.insert(transistion);
+        self.transitions.push(transition);
     }
-    pub fn iter_transitions(&self) -> impl Iterator<Item = &Transistion> {
+    pub fn iter_transitions(&self) -> impl Iterator<Item = &Transition> {
         self.transitions.iter()
     }
     pub fn iter_states(&self) -> impl Iterator<Item = State> + '_ {
         (0..self.state_count).map(|id| State(id))
+    }
+    pub fn iter_trans_from(&self, start: State) -> impl Iterator<Item = (&Message, State)> {
+        self.iter_transitions().filter_map(move |trans| {
+            if trans.start == start {
+                Some((&trans.msg, trans.end))
+            } else {
+                None
+            }
+        })
     }
     pub fn graph_viz(&self) -> GraphViz {
         GraphViz(self)
@@ -79,7 +79,7 @@ impl<'a> fmt::Display for GraphViz<'a> {
             writeln!(
                 f,
                 "  {} -> {}[label=\"{}\"];",
-                trans.start.0, trans.end.0, trans.label
+                trans.start.0, trans.end.0, trans.msg.label,
             )?;
         }
         writeln!(f, "}}")?;
@@ -87,6 +87,7 @@ impl<'a> fmt::Display for GraphViz<'a> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct StateName(State);
 
 impl State {

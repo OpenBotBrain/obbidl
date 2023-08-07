@@ -8,7 +8,7 @@ use crate::{
 #[derive(Debug, Clone, PartialEq)]
 pub struct Protocol {
     pub name: String,
-    pub roles: Option<Vec<String>>,
+    pub roles: Option<Vec<Role>>,
     pub seq: Sequence,
 }
 
@@ -24,38 +24,25 @@ pub enum Stmt {
     Inf(Sequence),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Message {
     pub label: String,
     pub payload: Payload,
-    pub from: String,
-    pub to: String,
+    pub from: Role,
+    pub to: Role,
 }
 
-impl Eq for Message {}
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Role(pub String);
 
-impl PartialEq for Message {
-    fn eq(&self, other: &Self) -> bool {
-        self.label == other.label && self.from == other.from && self.to == other.to
-    }
-}
-
-impl Hash for Message {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.label.hash(state);
-        self.from.hash(state);
-        self.to.hash(state);
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Type {
     Bool,
     Int { signed: bool, size: IntSize },
     String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IntSize {
     B32,
 }
@@ -65,7 +52,7 @@ pub struct Program {
     pub protocols: Vec<Protocol>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Payload {
     items: Vec<(String, Type)>,
 }
@@ -73,6 +60,18 @@ pub struct Payload {
 impl Payload {
     pub fn empty() -> Payload {
         Payload { items: vec![] }
+    }
+}
+
+impl Role {
+    pub fn new(name: impl Into<String>) -> Role {
+        Role(name.into())
+    }
+}
+
+impl Parse for Role {
+    fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
+        Ok(Role(parser.expect_token(TokenType::Ident)?.to_string()))
     }
 }
 
@@ -108,9 +107,9 @@ impl Parse for Message {
                 Payload::empty()
             };
             parser.expect_token(TokenType::Keyword(Keyword::From))?;
-            let from = parser.expect_token(TokenType::Ident)?.to_string();
+            let from = parser.parse()?;
             parser.expect_token(TokenType::Keyword(Keyword::To))?;
-            let to = parser.expect_token(TokenType::Ident)?.to_string();
+            let to = parser.parse()?;
             parser.expect_token(TokenType::Symbol(Symbol::Semicolon))?;
             Ok(Message {
                 label: label.to_string(),
@@ -211,7 +210,7 @@ impl Parse for Protocol {
                 .is_none()
             {
                 parser.expect_token(TokenType::Keyword(Keyword::Role))?;
-                roles.push(parser.expect_token(TokenType::Ident)?.to_string());
+                roles.push(parser.parse()?);
                 if !parser.eat_token(TokenType::Symbol(Symbol::Comma)).is_some() {
                     parser.expect_token(TokenType::Symbol(Symbol::CloseBrace))?;
                     break;
@@ -245,6 +244,12 @@ mod tests {
         report::Report,
     };
 
+    use super::Role;
+
+    fn role(name: impl Into<String>) -> Role {
+        Role(name.into())
+    }
+
     #[test]
     fn test_parse_msg() {
         let msg = parse::<Message>("X from Y to Z;").report();
@@ -253,8 +258,8 @@ mod tests {
             Message {
                 label: "X".to_string(),
                 payload: Payload::empty(),
-                from: "Y".to_string(),
-                to: "Z".to_string(),
+                from: role("Y"),
+                to: role("Z"),
             }
         )
     }
@@ -275,8 +280,8 @@ mod tests {
                         }
                     )]
                 },
-                from: "Y".to_string(),
-                to: "Z".to_string(),
+                from: role("Y"),
+                to: role("Z"),
             }
         )
     }

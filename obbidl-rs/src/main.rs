@@ -1,6 +1,7 @@
-use std::{fs, process::Command};
+use std::fs;
 
-use ast::Program;
+use ast::{Program, Role};
+use generate::generate_rust_bindings;
 use parser::parse;
 
 use crate::to_fsm::compile_protocol_def;
@@ -26,19 +27,22 @@ fn main() {
 
     for protocol in &program.protocols {
         let protocol = compile_protocol_def(protocol);
-        fs::write(
-            "output/output.dot",
-            protocol.state_machine.graph_viz().to_string(),
-        )
-        .unwrap();
+        let output = generate_rust_bindings(protocol, Role::new("C"), Role::new("S".to_string()));
+        fs::write("output/output.rs", &output).unwrap();
 
-        Command::new("dot")
-            .arg("-Tsvg")
-            .arg("-O")
-            .arg("output/output.dot")
-            .status()
-            .unwrap();
+        // fs::write(
+        //     "output/output.dot",
+        //     protocol.state_machine.graph_viz().to_string(),
+        // )
+        // .unwrap();
 
-        open::that("output/output.dot.svg").unwrap();
+        // Command::new("dot")
+        //     .arg("-Tsvg")
+        //     .arg("-O")
+        //     .arg("output/output.dot")
+        //     .status()
+        //     .unwrap();
+
+        // open::that("output/output.dot.svg").unwrap();
     }
 }

@@ -1,45 +1,70 @@
-use crate::{ast::Payload, fsm::State, to_fsm::ProtocolStateMachine};
+use askama::Template;
 
-struct Trans {
-    start: State,
-    end: State,
+use crate::{
+    ast::{Payload, Role},
+    fsm::StateName,
+    to_fsm::ProtocolStateMachine,
+};
+
+#[derive(Debug, Clone, Template)]
+#[template(path = "rust.j2")]
+struct RustTemplate {
+    states: Vec<State>,
+}
+
+#[derive(Debug, Clone)]
+enum State {
+    End,
+    Intermediate {
+        name: StateName,
+        dir: Direction,
+        messages: Vec<Message>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Direction {
+    Send,
+    Recv,
+}
+
+#[derive(Debug, Clone)]
+struct Message {
     label: String,
-    id: u32,
     payload: Payload,
+    dest_state_name: StateName,
 }
 
-trait Target {
-    fn emit_state(output: &mut String, state: State);
-    fn emit_send(output: &mut String, trans: Trans);
-    fn emit_recv(output: &mut String, trans: Trans);
-}
-
-fn generate_bindings<T: Target>(protocol: ProtocolStateMachine, role: &str) -> String {
-    let mut output = String::new();
+pub fn generate_rust_bindings(protocol: ProtocolStateMachine, you: Role, other: Role) -> String {
+    let mut states = vec![];
 
     for state in protocol.state_machine.iter_states() {
-        T::emit_state(&mut output, state);
+        let mut dir_iter = protocol
+            .state_machine
+            .iter_trans_from(state)
+            .map(|(msg, _)| {
+                if msg.from == you && msg.to == other {
+                    Direction::Send
+                } else if msg.from == other && msg.to == you {
+                    Direction::Recv
+                } else {
+                    panic!()
+                }
+            });
+
+        states.push(let Some(dir) = dir_iter.next() {
+            if !dir_iter.all(|d| d == dir) {
+                panic!()
+            }
+            State::Intermediate {
+                name: state.name(),
+                dir,
+                messages,
+            }
+        } else {
+            State::End
+        })
     }
 
-    // for trans in protocol.state_machine.iter_transitions() {
-    //     T::emit_trans(&mut output, trans);
-    // }
-
-    output
-}
-
-struct Rust;
-
-impl Target for Rust {
-    fn emit_state(output: &mut String, state: State) {
-        output.push_str(&format!("struct {};\n", state.name()));
-    }
-
-    fn emit_send(output: &mut String, trans: Trans) {
-        todo!()
-    }
-
-    fn emit_recv(output: &mut String, trans: Trans) {
-        todo!()
-    }
+    RustTemplate { states }.render().unwrap()
 }

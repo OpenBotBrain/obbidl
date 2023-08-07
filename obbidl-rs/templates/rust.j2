@@ -1,0 +1,29 @@
+{% for state in states %}
+
+struct {{ state.name }};
+
+impl {{ state.name }} {
+
+    {% if state.dir == Direction::Recv %}
+    enum {{ state.name }}Recv {
+        {% for msg in state.messages %}
+
+        {% endfor %}
+    }
+
+    fn recv(self) -> {{ state.name}}Enum {
+
+    }
+    {% endif %}
+
+    {% if state.dir == Direction::Send %}
+    {% for msg in state.messages %}
+    fn send_{{ msg.label }}(self) -> {{ msg.dest_state_name }} {
+
+    }
+    {% endfor %}
+    {% endif %}
+
+}
+
+{% endfor %}
