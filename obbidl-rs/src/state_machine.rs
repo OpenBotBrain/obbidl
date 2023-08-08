@@ -1,9 +1,9 @@
 use std::fmt;
 
-use crate::ast::Message;
+use crate::{ast::Message, compile::ProtocolFileStateMachines, graph::GraphViz};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct State(u32);
+pub struct State(pub u32);
 
 #[derive(Debug, Clone)]
 pub struct Transition {
@@ -64,26 +64,11 @@ impl StateMachine {
             }
         })
     }
-    pub fn graph_viz(&self) -> GraphViz {
-        GraphViz(self)
-    }
 }
 
-#[derive(Debug, Clone)]
-pub struct GraphViz<'a>(&'a StateMachine);
-
-impl<'a> fmt::Display for GraphViz<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "digraph {{")?;
-        for trans in self.0.iter_transitions() {
-            writeln!(
-                f,
-                "  {} -> {}[label=\"{}\"];",
-                trans.start.0, trans.end.0, trans.msg.label,
-            )?;
-        }
-        writeln!(f, "}}")?;
-        Ok(())
+impl ProtocolFileStateMachines {
+    pub fn graph_viz(&self) -> GraphViz {
+        GraphViz(self)
     }
 }
 

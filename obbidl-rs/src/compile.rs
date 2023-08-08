@@ -1,8 +1,8 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::{
-    ast::{Message, Protocol, Role, Sequence, Sequences, Stmt},
-    fsm::{StateMachine, Transition},
+    ast::{Message, Protocol, ProtocolFile, Role, Sequence, Sequences, Stmt},
+    state_machine::{StateMachine, Transition},
 };
 
 #[derive(Debug, Clone)]
@@ -12,9 +12,22 @@ pub struct ProtocolStateMachine {
     pub state_machine: StateMachine,
 }
 
+#[derive(Debug, Clone)]
+pub struct ProtocolFileStateMachines {
+    pub protocols: Vec<ProtocolStateMachine>,
+}
+
 const DEFAULT_ROLES: &[&str] = &["C", "S"];
 
-pub fn compile_protocol_def(protocol: &Protocol) -> ProtocolStateMachine {
+pub fn compile_protocol_file(file: &ProtocolFile) -> ProtocolFileStateMachines {
+    let mut protocols = vec![];
+    for protocol in &file.protocols {
+        protocols.push(compile_protocol(protocol))
+    }
+    ProtocolFileStateMachines { protocols }
+}
+
+pub fn compile_protocol(protocol: &Protocol) -> ProtocolStateMachine {
     let mut state_machine = StateMachine::new();
     let mut states = HashMap::new();
     let mut queue = VecDeque::new();
@@ -68,7 +81,6 @@ pub fn generate_transitions(seq: &Sequence) -> Vec<(Message, Sequence)> {
     };
     let mut trans = vec![];
     match stmt {
-        // Stmt::Message(msg) => trans.push((msg.clone(), Sequence(iter.clone().cloned().collect()))),
         Stmt::Message(msg) => trans.push((msg.clone(), Sequence(vec![]))),
         Stmt::Choice(seqs) => {
             for seq in &seqs.0 {

@@ -1,76 +1,136 @@
+{% macro int_type(ty) %}
+{% if ty.signed %}i{% else %}u{% endif %}
+{%- match ty.size %}
+{%- when IntSize::B8 %}8
+{%- when IntSize::B16 %}16
+{%- when IntSize::B32 %}32
+{%- when IntSize::B64 %}64
+{% endmatch %}
+{% endmacro %}
+
 {% macro params(payload) %}
     {% for (name, ty) in payload.items %}
         {{name}}:
         {% match ty %}
-            {% when Bool %}
+            {% when Type::Bool %}
             bool
-            {% when String %}
+            {% when Type::String %}
             &str
-            {% when Type::Int with { signed, size } %}
-            {% if signed %}i{% else %}u{% endif %}
-            {% match size %}
-            {% when B8 %} 8
-            {% when B16 %} 16
-            {% when B32 %} 32
-            {% when B64 %} 64
-            {% endmatch %}
+            {% when Type::Int with (ty) %}
+            {% call int_type(ty) %}
         {% endmatch %},
     {% endfor %}
 {% endmacro %}
 
-trait Channel {
-    type Error;
+{% macro protocol(protocol, role) %}
 
-    fn recv(&mut self, data: &mut [u8]) -> Result<(), Self::Error>;
-    fn send(&mut self, data: &[u8]) -> Result<(), Self::Error>;
+use std::mem::size_of;
+use obbidl::channel::Channel;
 
-    fn recv_u8(&mut self) -> Result<u8, Self::Error> {
-        let mut data = [0; 1];
-        self.recv(&mut data)?;
-        Ok(data[0])
-    }
-    fn send_u8(&mut self, data: u8) -> Result<(), Self::Error> {
-        self.send(&[data])
-    }
+{% for state in protocol.states %}
+
+#[must_use]
+pub struct {{ state.name }}<C: Channel>(C);
+
+{% match state.trans %}
+
+{% when Some with (trans) %}
+
+{% if (trans.dir == Direction::AToB && role == SimpleRole::B) || (trans.dir == Direction::BToA && role == SimpleRole::A) %}
+
+pub trait {{ state.name }}Receiver<C: Channel<Error = E>, E> {
+    type Type;
+
+    {% for msg in trans.messages %}
+    fn recv_{{ msg.label }}(self, state: {{ msg.dest_state_name }}<C>, {% call params(msg.payload) %}) -> Result<Self::Type, E>;
+    {% endfor %}
 }
-
-{% for state in states %}
-
-struct {{ state.name }}<C: Channel>(C);
-
-{% if state.dir == Direction::Recv %}
-
-type {{ state.name }}Result = ();
 
 impl<C: Channel<Error = E>, E> {{ state.name }}<C> {
 
-    fn recv(self) -> Result<{{ state.name }}Result, E> {
-        {% for msg in state.messages %}
-        if self.0.recv_u8()? == {{ msg.label }} {
-            Ok(self.recv_{{ msg.label }}({{ msg.dest_state_name }}(self.0)))
+    pub fn recv<T>(mut self, receiver: impl {{ state.name }}Receiver<C, E, Type = T>) -> Result<T, E> {
+        {% for msg in trans.messages %}
+        if self.0.recv_u8()? == {{ msg.id }} {
+            {% for (name, ty) in msg.payload.items %}
+            {% match ty %}
+            {% when Type::Bool %}
+            let {{ name }} = self.0.recv_u8()? != 0;
+            {% when Type::Int with (ty) %}
+            let mut bytes = [0; size_of::<{% call int_type(ty) %}>()];
+            self.0.recv(&mut bytes)?;
+            let {{ name }} = {% call int_type(ty) %}::from_be_bytes(bytes);
+            {% when Type::String %}
+            todo!()
+            {% endmatch %}
+            {% endfor %}
+
+            return Ok(receiver.recv_{{ msg.label }}({{ msg.dest_state_name }}(self.0),
+            {% for (name, _) in msg.payload.items %}
+                {{ name }},
+            {% endfor %}
+            )?)
         }
         {% endfor %}
+        panic!("invalid message!")
     }
-
-    {% for msg in state.messages %}
-    fn recv_{{ msg.label }}(self, state: {{ msg.dest_state_name }}, {% call params(msg.payload) %}) -> {{ state.name }}Result {
-        todo!()
-    }
-    {% endfor %}
 
 }
 
 {% endif %}
 
-{% if state.dir == Direction::Send %}
+{% if (trans.dir == Direction::AToB && role == SimpleRole::A) || (trans.dir == Direction::BToA && role == SimpleRole::B) %}
 impl<C: Channel<Error = E>, E> {{ state.name }}<C> {
-    {% for msg in state.messages %}
-    fn send_{{ msg.label }}(self, {% call params(msg.payload) %}) -> Result<{{ msg.dest_state_name }}, E> {
-        self.0.send_u8({{ msg.label }})?;
-        {{ msg.dest_state_name }}(self.0)
+    {% for msg in trans.messages %}
+    pub fn send_{{ msg.label }}(mut self, {% call params(msg.payload) %}) -> Result<{{ msg.dest_state_name }}<C>, E> {
+        self.0.send_u8({{ msg.id }})?;
+
+        {% for (name, ty) in msg.payload.items %}
+        {% match ty %}
+        {% when Type::Bool %}
+        self.0.send_u8(if {{ name }} { 1 } else { 0 })?;
+        {% when Type::Int with (ty) %}
+        self.0.send(&{% call int_type(ty) %}::to_be_bytes({{ name }}))?;
+        {% when Type::String %}
+        todo!()
+        {% endmatch %}
+        {% endfor %}
+
+        Ok({{ msg.dest_state_name }}(self.0))
     }
     {% endfor %}
 }
 {% endif %}
+
+{% when None %}
+
+impl<C: Channel<Error = E>, E> {{ state.name }}<C> {
+    pub fn finish(self) {}
+}
+
+{% endmatch %}
+
+{% endfor %}
+
+impl<C: Channel> S0<C> {
+    pub fn new(channel: C) -> S0<C> {
+        S0(channel)
+    }
+}
+
+{% endmacro %}
+
+{% for protocol in file.protocols %}
+
+pub mod {{ protocol.name }} {
+
+    pub mod {{ protocol.role_a }} {
+        {% call protocol(protocol, SimpleRole::A) %}
+    }
+
+    pub mod {{ protocol.role_b }} {
+        {% call protocol(protocol, SimpleRole::B) %}
+    }
+
+}
 
 {% endfor %}

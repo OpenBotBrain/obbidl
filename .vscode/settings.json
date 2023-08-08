@@ -1,3 +1,7 @@
 {
     "markiscodecoverage.searchCriteria": "obbidl-rs/lcov.info",
+    "rust-analyzer.linkedProjects": [
+        "./example-rs/Cargo.toml",
+        "./obbidl-rs/Cargo.toml"
+    ],
 }

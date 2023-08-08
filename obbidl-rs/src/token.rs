@@ -28,10 +28,16 @@ pub enum Keyword {
     And,
     Or,
     String,
-    U32,
-    I32,
     Bool,
     Role,
+    U64,
+    U32,
+    U16,
+    U8,
+    I64,
+    I32,
+    I16,
+    I8,
 }
 
 #[derive(Debug, Clone, Copy, EnumIter, PartialEq)]
@@ -62,6 +68,12 @@ impl Keyword {
             Keyword::I32 => "i32",
             Keyword::Bool => "bool",
             Keyword::Role => "role",
+            Keyword::U64 => "u64",
+            Keyword::U16 => "u16",
+            Keyword::U8 => "u8",
+            Keyword::I64 => "i64",
+            Keyword::I16 => "i16",
+            Keyword::I8 => "i8",
         }
     }
 }

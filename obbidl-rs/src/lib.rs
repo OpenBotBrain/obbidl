@@ -1,12 +1,12 @@
-use std::fs;
+use std::{env, fs, path::Path};
 
-use ast::ProtocolFile;
-use compile::compile_protocol_file;
+use ast::{ProtocolFile, Role};
+use compile::{compile_protocol, compile_protocol_file};
 use generate::generate_rust_bindings;
 use parser::parse;
 
 mod ast;
-mod channel;
+pub mod channel;
 mod compile;
 mod generate;
 mod graph;
@@ -16,8 +16,10 @@ mod report;
 mod state_machine;
 mod token;
 
-fn main() {
-    let source = fs::read_to_string("example.txt").unwrap();
+pub fn build(path: impl AsRef<Path>) {
+    let path = path.as_ref();
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let source = fs::read_to_string(path).unwrap();
     let file = match parse::<ProtocolFile>(&source) {
         Ok(ast) => ast,
         Err(err) => {
@@ -27,5 +29,6 @@ fn main() {
     };
     let file = compile_protocol_file(&file);
     let output = generate_rust_bindings(&file);
-    fs::write("output.rs", output).unwrap();
+    let file_name = path.file_name().unwrap();
+    fs::write(Path::new(&out_dir).join(file_name), output).unwrap();
 }

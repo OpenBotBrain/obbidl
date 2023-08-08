@@ -1,5 +1,6 @@
 use std::{
     collections::{hash_map::DefaultHasher, HashSet},
+    fmt,
     hash::{Hash, Hasher},
 };
 
@@ -64,17 +65,61 @@ pub struct Role(pub String);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Type {
     Bool,
-    Int { signed: bool, size: IntSize },
+    Int(IntType),
     String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct IntType {
+    pub signed: bool,
+    pub size: IntSize,
+}
+
+impl IntType {
+    const I64: IntType = IntType {
+        signed: true,
+        size: IntSize::B64,
+    };
+    const I32: IntType = IntType {
+        signed: true,
+        size: IntSize::B32,
+    };
+    const I16: IntType = IntType {
+        signed: true,
+        size: IntSize::B16,
+    };
+    const I8: IntType = IntType {
+        signed: true,
+        size: IntSize::B8,
+    };
+    const U64: IntType = IntType {
+        signed: false,
+        size: IntSize::B64,
+    };
+    const U32: IntType = IntType {
+        signed: false,
+        size: IntSize::B32,
+    };
+    const U16: IntType = IntType {
+        signed: false,
+        size: IntSize::B16,
+    };
+    const U8: IntType = IntType {
+        signed: false,
+        size: IntSize::B8,
+    };
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IntSize {
+    B64,
     B32,
+    B16,
+    B8,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Program {
+pub struct ProtocolFile {
     pub protocols: Vec<Protocol>,
 }
 
@@ -161,16 +206,22 @@ impl Parse for Type {
             .is_some()
         {
             Ok(Type::String)
+        } else if parser.eat_token(TokenType::Keyword(Keyword::U64)).is_some() {
+            Ok(Type::Int(IntType::U64))
         } else if parser.eat_token(TokenType::Keyword(Keyword::U32)).is_some() {
-            Ok(Type::Int {
-                signed: false,
-                size: IntSize::B32,
-            })
+            Ok(Type::Int(IntType::U32))
+        } else if parser.eat_token(TokenType::Keyword(Keyword::U16)).is_some() {
+            Ok(Type::Int(IntType::U16))
+        } else if parser.eat_token(TokenType::Keyword(Keyword::U8)).is_some() {
+            Ok(Type::Int(IntType::U8))
+        } else if parser.eat_token(TokenType::Keyword(Keyword::I64)).is_some() {
+            Ok(Type::Int(IntType::I64))
         } else if parser.eat_token(TokenType::Keyword(Keyword::I32)).is_some() {
-            Ok(Type::Int {
-                signed: true,
-                size: IntSize::B32,
-            })
+            Ok(Type::Int(IntType::I32))
+        } else if parser.eat_token(TokenType::Keyword(Keyword::I16)).is_some() {
+            Ok(Type::Int(IntType::I16))
+        } else if parser.eat_token(TokenType::Keyword(Keyword::I8)).is_some() {
+            Ok(Type::Int(IntType::I8))
         } else {
             Err(parser.invalid_token())
         }
@@ -252,20 +303,26 @@ impl Parse for Protocol {
     }
 }
 
-impl Parse for Program {
+impl fmt::Display for Role {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Parse for ProtocolFile {
     fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
-        let mut defs = vec![];
+        let mut protocols = vec![];
         while parser.eat_token(TokenType::End).is_none() {
-            defs.push(parser.parse()?)
+            protocols.push(parser.parse()?)
         }
-        Ok(Program { protocols: defs })
+        Ok(ProtocolFile { protocols })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        ast::{IntSize, Message, Payload, Type},
+        ast::{IntSize, IntType, Message, Payload, Type},
         parser::parse,
         report::Report,
     };
@@ -300,10 +357,10 @@ mod tests {
                 payload: Payload {
                     items: vec![(
                         "x".to_string(),
-                        Type::Int {
+                        Type::Int(IntType {
                             signed: false,
                             size: IntSize::B32
-                        }
+                        })
                     )]
                 },
                 from: role("Y"),

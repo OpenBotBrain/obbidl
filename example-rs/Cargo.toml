@@ -1,13 +1,12 @@
 [package]
-name = "obbidl"
+name = "example"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-askama = "0.12.0"
-colored = "2.0.4"
-itertools = "0.11.0"
-open = "5.0.0"
-strum = { version = "0.25.0", features = ["derive"] }
+obbidl = { path = "../obbidl-rs" }
+
+[build-dependencies]
+obbidl = { path = "../obbidl-rs" }
