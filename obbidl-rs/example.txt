@@ -1,7 +1,7 @@
-protocol test(role C) {
+protocol test(role C, role S) {
     choice {
-        x from C to C;
+        x(u32, u32) from C to S;
     } or {
-        x from C to S;
+        y from C to S;
     }
 }

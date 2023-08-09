@@ -90,6 +90,8 @@ fn main() -> ExitCode {
         };
         let output = GenerateRust(&file).to_string();
 
+        println!("{}", output);
+
         let child = Command::new("rustfmt")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

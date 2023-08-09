@@ -40,7 +40,7 @@ fn send_type(f: &mut fmt::Formatter<'_>, name: &str, ty: &Type) -> fmt::Result {
         Type::Int(ty) => writeln!(f, "self.0.send(&{}::to_be_bytes({}))?;", ty, name)?,
         Type::Array(ty, size) => {
             if size.is_none() {
-                writeln!(f, "self.0.send(&u32::to_be_bytes({}.len() as u32));", name)?;
+                writeln!(f, "self.0.send(&u32::to_be_bytes({}.len() as u32))?;", name)?;
             }
             writeln!(f, "for i in 0..{}.len() {{", name)?;
             send_type(f, &format!("{}[i]", name), ty)?;
@@ -119,8 +119,22 @@ fn generate_protocol(
                     }
                     writeln!(f, "}}")?;
 
-                    // writeln!(f, "pub enum {}Response<C> {{", state.name)?;
+                    // writeln!(f, "pub enum {}Response<C: Channel> {{", state.name)?;
+                    // for msg in &trans.messages {
+                    //     writeln!(f, "{} {{", msg.label)?;
+                    //     writeln!(f, "state: {}<C>, {}", msg.dest_state_name, msg.payload)?;
+                    //     writeln!(f, "}},")?;
+                    // }
+                    // writeln!(f, "}}")?;
 
+                    // writeln!(f, "struct {}DefaultReceiver;", state.name)?;
+
+                    // writeln!(
+                    //     f,
+                    //     "impl<C: Channel<Error = E>, E> {}Receiver<C, E> for {}DefaultReceiver {{",
+                    //     state.name, state.name
+                    // )?;
+                    // TODO!
                     // writeln!(f, "}}")?;
 
                     writeln!(f, "impl<C: Channel<Error = E>, E> {}<C> {{", state.name)?;

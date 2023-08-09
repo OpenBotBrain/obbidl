@@ -31,7 +31,7 @@ struct Response;
 impl<C: Channel<Error = E>, E> c::S1Receiver<C, E> for Response {
     type Type = (Vec<u32>, Vec<u32>);
 
-    fn recv_return(self, state: c::S2<C>, a: &[u32], b: &[u32]) -> Result<Self::Type, E> {
+    fn recv_ret(self, state: c::S2<C>, a: &[u32], b: &[u32]) -> Result<Self::Type, E> {
         state.finish();
         Ok((a.iter().copied().collect(), b.iter().copied().collect()))
     }
@@ -58,7 +58,7 @@ fn main() {
             b: vec![],
         })
         .unwrap();
-    let server = server.send_return(&a, &b).unwrap();
+    let server = server.send_ret(&a, &b).unwrap();
     server.finish();
 
     let total = client.recv(Response).unwrap();
