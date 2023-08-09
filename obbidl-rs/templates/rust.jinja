@@ -49,8 +49,9 @@ pub trait {{ state.name }}Receiver<C: Channel<Error = E>, E> {
 impl<C: Channel<Error = E>, E> {{ state.name }}<C> {
 
     pub fn recv<T>(mut self, receiver: impl {{ state.name }}Receiver<C, E, Type = T>) -> Result<T, E> {
+        let id = self.0.recv_u8()?;
         {% for msg in trans.messages %}
-        if self.0.recv_u8()? == {{ msg.id }} {
+        if id == {{ msg.id }} {
             {% for (name, ty) in msg.payload.items %}
             {% match ty %}
             {% when Type::Bool %}

@@ -1,8 +1,11 @@
-protocol test(role C, role S) {
-    choice {
-        x(a: i32) from C to S;
-    } or {
-        y(b: i32) from C to S;
+protocol test(role c, role s) {
+    fin {
+        choice {
+            add(a: u32) from c to s;
+        } or {
+            subtract(b: u32) from c to s;
+        }
     }
-    z(x: u16) from S to C;
+    finish from c to s;
+    total(total: u32) from s to c;
 }

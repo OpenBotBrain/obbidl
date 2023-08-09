@@ -1,3 +1,3 @@
 fn main() {
-    obbidl::build("test.txt")
+    obbidl::build("test.txt");
 }

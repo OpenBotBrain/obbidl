@@ -62,9 +62,10 @@ impl<'a> fmt::Display for ParseError<'a> {
             self.column
         )?;
         writeln!(f, "  Found {}", TokenName(self.token))?;
-        writeln!(f, "  Expected one of the following:",)?;
+        write!(f, "  Expected one of the following:",)?;
         for token in &self.expected_tokens {
-            writeln!(f, "    - {}", TokenTypeName(*token))?;
+            writeln!(f)?;
+            write!(f, "    - {}", TokenTypeName(*token))?;
         }
         Ok(())
     }

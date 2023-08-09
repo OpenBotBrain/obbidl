@@ -1,47 +1,59 @@
-use std::convert::Infallible;
+include!(concat!(env!("OUT_DIR"), "/test.rs"));
 
-include!(concat!(env!("OUT_DIR"), "/test.txt"));
+use obbidl::channel::{Channel, TestChannel};
+use test::{c, s};
 
-use obbidl::channel::Channel;
-use test::S::{S0Receiver, S0, S1, S2};
+struct Accumulator {
+    total: u32,
+}
 
-struct DummyChannel;
+impl<C: Channel<Error = E>, E> s::S0Receiver<C, E> for Accumulator {
+    type Type = (u32, s::S1<C>);
 
-impl Channel for DummyChannel {
-    type Error = Infallible;
-
-    fn recv(&mut self, _: &mut [u8]) -> Result<(), Self::Error> {
-        Ok(())
+    fn recv_add(mut self, state: s::S0<C>, a: u32) -> Result<Self::Type, E> {
+        self.total += a;
+        state.recv(self)
     }
 
-    fn send(&mut self, _: &[u8]) -> Result<(), Self::Error> {
-        Ok(())
+    fn recv_subtract(mut self, state: s::S0<C>, b: u32) -> Result<Self::Type, E> {
+        self.total -= b;
+        state.recv(self)
+    }
+
+    fn recv_finish(self, state: s::S1<C>) -> Result<Self::Type, E> {
+        Ok((self.total, state))
     }
 }
 
-#[derive(Debug)]
-enum Res {
-    X,
-    Y,
-}
+struct Response;
 
-struct Receiver;
+impl<C: Channel<Error = E>, E> c::S1Receiver<C, E> for Response {
+    type Type = u32;
 
-impl<C: Channel<Error = E>, E> S0Receiver<C, E> for Receiver {
-    type Type = (Res, S2<C>);
-
-    fn recv_x(self, state: S1<C>, a: i32) -> Result<Self::Type, E> {
-        Ok((Res::X, state.send_z(0)?))
-    }
-
-    fn recv_y(self, state: S1<C>, b: i32) -> Result<Self::Type, E> {
-        Ok((Res::Y, state.send_z(0)?))
+    fn recv_total(self, state: c::S2<C>, total: u32) -> Result<Self::Type, E> {
+        state.finish();
+        Ok(total)
     }
 }
 
 fn main() {
-    let start = S0::new(DummyChannel);
-    let (res, state) = start.recv(Receiver).unwrap();
-    state.finish();
-    println!("{:?}", res);
+    let (client_channel, server_channel) = TestChannel::new();
+
+    let mut client = c::S0::new(client_channel);
+    let server = s::S0::new(server_channel);
+
+    for i in 0..100 {
+        if i % 3 != 0 {
+            client = client.send_add(i * 2).unwrap();
+        } else {
+            client = client.send_subtract(i).unwrap();
+        }
+    }
+    let client = client.send_finish().unwrap();
+
+    let (total, server) = server.recv(Accumulator { total: 0 }).unwrap();
+    server.send_total(total).unwrap().finish();
+
+    let total = client.recv(Response).unwrap();
+    println!("{}", total);
 }
