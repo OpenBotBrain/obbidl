@@ -125,7 +125,7 @@ pub struct ProtocolFile {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Payload {
-    pub items: Vec<(String, Type)>,
+    pub items: Vec<(Option<String>, Type)>,
 }
 
 impl Payload {
@@ -153,10 +153,14 @@ impl Parse for Payload {
             .eat_token(TokenType::Symbol(Symbol::CloseBrace))
             .is_none()
         {
-            let name = parser.expect_token(TokenType::Ident)?;
-            parser.expect_token(TokenType::Symbol(Symbol::Colon))?;
+            let name = if let Some(token) = parser.eat_token(TokenType::Ident) {
+                parser.expect_token(TokenType::Symbol(Symbol::Colon))?;
+                Some(token.to_string())
+            } else {
+                None
+            };
             let ty = parser.parse()?;
-            items.push((name.to_string(), ty));
+            items.push((name, ty));
             if !parser.eat_token(TokenType::Symbol(Symbol::Comma)).is_some() {
                 parser.expect_token(TokenType::Symbol(Symbol::CloseBrace))?;
                 break;
@@ -356,7 +360,7 @@ mod tests {
                 label: "X".to_string(),
                 payload: Payload {
                     items: vec![(
-                        "x".to_string(),
+                        Some("x".to_string()),
                         Type::Int(IntType {
                             signed: false,
                             size: IntSize::B32

@@ -1,7 +1,7 @@
 use askama::Template;
 
 use crate::{
-    ast::{IntSize, Payload, Role, Type},
+    ast::{IntSize, Role, Type},
     compile::{ProtocolFileStateMachines, ProtocolStateMachine},
     state_machine::StateName,
 };
@@ -57,6 +57,11 @@ struct Message {
     dest_state_name: StateName,
 }
 
+#[derive(Debug, Clone)]
+struct Payload {
+    items: Vec<(String, Type)>,
+}
+
 pub fn generate_rust_bindings(file: &ProtocolFileStateMachines) -> String {
     RustTemplate {
         file: validate_protocol_file(file),
@@ -110,7 +115,20 @@ pub fn validate_protocol(protocol: &ProtocolStateMachine) -> Protocol {
                 .map(|(index, (msg, state))| Message {
                     label: msg.label.clone(),
                     id: index as u8,
-                    payload: msg.payload.clone(),
+                    payload: Payload {
+                        items: msg
+                            .payload
+                            .items
+                            .iter()
+                            .enumerate()
+                            .map(|(index, (name, ty))| {
+                                (
+                                    name.clone().unwrap_or_else(|| format!("param{}", index)),
+                                    ty.clone(),
+                                )
+                            })
+                            .collect(),
+                    },
                     dest_state_name: state.name(),
                 })
                 .collect();
