@@ -1,155 +1,211 @@
-use askama::Template;
+use std::fmt;
 
 use crate::{
-    ast::{IntSize, Role, Type},
-    compile::{ProtocolFileStateMachines, ProtocolStateMachine},
-    state_machine::StateName,
+    ast::{IntSize, IntType, Type},
+    validate::{Direction, Payload, Protocol, ProtocolFile, SimpleRole},
 };
 
-#[derive(Debug, Clone, Template)]
-#[template(path = "rust.jinja", whitespace = "minimize")]
-struct RustTemplate {
-    file: ProtocolFile,
-}
-
-#[derive(Debug, Clone)]
-pub struct ProtocolFile {
-    pub protocols: Vec<Protocol>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Protocol {
-    pub name: String,
-    pub role_a: Role,
-    pub role_b: Role,
-    pub states: Vec<State>,
-}
-
-#[derive(Debug, Clone)]
-pub struct State {
-    pub name: StateName,
-    pub trans: Option<Transitions>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Transitions {
-    pub dir: Direction,
-    pub messages: Vec<Message>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Direction {
-    BToA,
-    AToB,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum SimpleRole {
-    A,
-    B,
-}
-
-#[derive(Debug, Clone)]
-pub struct Message {
-    pub label: String,
-    pub id: u8,
-    pub payload: Payload,
-    pub dest_state_name: StateName,
-}
-
-#[derive(Debug, Clone)]
-pub struct Payload {
-    pub items: Vec<(String, Type)>,
-}
-
-pub fn generate_rust_bindings(file: &ProtocolFileStateMachines) -> String {
-    RustTemplate {
-        file: validate_protocol_file(file),
-    }
-    .render()
-    .unwrap()
-}
-
-pub fn validate_protocol_file(file: &ProtocolFileStateMachines) -> ProtocolFile {
-    let mut protocols = vec![];
-    for protocol in &file.protocols {
-        protocols.push(validate_protocol(protocol));
-    }
-
-    ProtocolFile { protocols }
-}
-
-pub fn validate_protocol(protocol: &ProtocolStateMachine) -> Protocol {
-    let mut states = vec![];
-
-    if protocol.roles.len() != 2 {
-        panic!()
-    }
-
-    let a = protocol.roles[0].clone();
-    let b = protocol.roles[1].clone();
-
-    for state in protocol.state_machine.iter_states() {
-        let mut dir_iter = protocol
-            .state_machine
-            .iter_trans_from(state)
-            .map(|(msg, _)| {
-                if msg.from == a && msg.to == b {
-                    Direction::AToB
-                } else if msg.from == b && msg.to == a {
-                    Direction::BToA
-                } else {
-                    panic!()
-                }
-            });
-
-        let trans = if let Some(dir) = dir_iter.next() {
-            if !dir_iter.all(|d| d == dir) {
-                panic!()
-            }
-
-            let messages = protocol
-                .state_machine
-                .iter_trans_from(state)
-                .enumerate()
-                .map(|(index, (msg, state))| Message {
-                    label: msg.label.clone(),
-                    id: index as u8,
-                    payload: Payload {
-                        items: msg
-                            .payload
-                            .items
-                            .iter()
-                            .enumerate()
-                            .map(|(index, (name, ty))| {
-                                (
-                                    name.clone().unwrap_or_else(|| format!("param{}", index)),
-                                    ty.clone(),
-                                )
-                            })
-                            .collect(),
-                    },
-                    dest_state_name: state.name(),
-                })
-                .collect();
-
-            // CHECK FOR MULTIPLE OF SAME LABEL!!!
-
-            Some(Transitions { dir, messages })
+impl fmt::Display for IntType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.signed {
+            write!(f, "i")?;
         } else {
-            None
-        };
+            write!(f, "u")?;
+        }
+        match self.size {
+            IntSize::B64 => write!(f, "64"),
+            IntSize::B32 => write!(f, "32"),
+            IntSize::B16 => write!(f, "16"),
+            IntSize::B8 => write!(f, "8"),
+        }
+    }
+}
 
-        states.push(State {
-            name: state.name(),
-            trans,
-        })
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Type::Bool => write!(f, "bool"),
+            Type::Int(ty) => write!(f, "{}", ty),
+            Type::Array(ty, size) => match size {
+                Some(size) => write!(f, "&[{}; {}]", ty, size),
+                None => write!(f, "&[{}]", ty),
+            },
+        }
+    }
+}
+
+fn send_type(f: &mut fmt::Formatter<'_>, name: &str, ty: &Type) -> fmt::Result {
+    match ty {
+        Type::Bool => writeln!(f, "self.0.send_u8(if {} {{ 1 }} else {{ 0 }})?;", name)?,
+        Type::Int(ty) => writeln!(f, "self.0.send(&{}::to_be_bytes({}))?;", ty, name)?,
+        Type::Array(ty, size) => {
+            if size.is_none() {
+                writeln!(f, "self.0.send(&u32::to_be_bytes({}.len() as u32));", name)?;
+            }
+            writeln!(f, "for i in 0..{}.len() {{", name)?;
+            send_type(f, &format!("{}[i]", name), ty)?;
+            writeln!(f, "}}")?;
+        }
+    }
+    Ok(())
+}
+
+fn recv_type(f: &mut fmt::Formatter<'_>, name: &str, ty: &Type) -> fmt::Result {
+    match ty {
+        Type::Bool => writeln!(f, "let {} = self.0.recv_u8()? != 0;", name)?,
+        Type::Int(ty) => {
+            writeln!(f, "let mut bytes = [0; size_of::<{}>()];", ty)?;
+            writeln!(f, "self.0.recv(&mut bytes)?;")?;
+            writeln!(f, "let {} = {}::from_be_bytes(bytes);", name, ty)?;
+        }
+        Type::Array(ty, size) => {
+            match size {
+                Some(size) => writeln!(f, "let mut {}_ = [{}::default(); {}];", name, ty, size)?,
+                None => writeln!(
+                    f,
+                    "let mut {}_ = vec![{}::default(); self.0.recv_u32()? as usize];",
+                    name, ty
+                )?,
+            }
+            writeln!(f, "for i in 0..{}_.len() {{", name)?;
+            recv_type(f, "x", ty)?;
+            writeln!(f, "{}_[i] = x;", name)?;
+            writeln!(f, "}}")?;
+            writeln!(f, "let {} = {}_.as_slice();", name, name)?;
+        }
+    }
+    Ok(())
+}
+
+impl fmt::Display for Payload {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (name, ty) in &self.items {
+            write!(f, "{}: {}, ", name, ty)?;
+        }
+        Ok(())
+    }
+}
+
+fn generate_protocol(
+    f: &mut fmt::Formatter<'_>,
+    protocol: &Protocol,
+    role: SimpleRole,
+) -> fmt::Result {
+    writeln!(f, "use std::mem::size_of;")?;
+    writeln!(f, "use obbidl::channel::Channel;")?;
+
+    for state in &protocol.states {
+        writeln!(f, "#[must_use]")?;
+        writeln!(f, "pub struct {}<C: Channel>(C);", state.name)?;
+
+        match &state.trans {
+            Some(trans) => {
+                if (trans.dir == Direction::AToB && role == SimpleRole::B)
+                    || (trans.dir == Direction::BToA && role == SimpleRole::A)
+                {
+                    writeln!(
+                        f,
+                        "pub trait {}Receiver<C: Channel<Error = E>, E> {{",
+                        state.name
+                    )?;
+                    writeln!(f, "type Type;")?;
+
+                    for msg in &trans.messages {
+                        writeln!(
+                            f,
+                            "fn recv_{}(self, state: {}<C>, {}) -> Result<Self::Type, E>;",
+                            msg.label, msg.dest_state_name, msg.payload
+                        )?;
+                    }
+                    writeln!(f, "}}")?;
+
+                    writeln!(f, "impl<C: Channel<Error = E>, E> {}<C> {{", state.name)?;
+                    writeln!(f, "pub fn recv<T>(mut self, receiver: impl {}Receiver<C, E, Type = T>) -> Result<T, E> {{", state.name)?;
+                    writeln!(f, "let id = self.0.recv_u8()?;")?;
+                    for msg in &trans.messages {
+                        writeln!(f, "if id == {} {{", msg.id)?;
+                        for (name, ty) in &msg.payload.items {
+                            recv_type(f, name, ty)?;
+                        }
+
+                        write!(
+                            f,
+                            "return Ok(receiver.recv_{}({}(self.0), ",
+                            msg.label, msg.dest_state_name
+                        )?;
+                        for (name, _) in &msg.payload.items {
+                            write!(f, "{}, ", name)?;
+                        }
+                        writeln!(f, ")?);")?;
+                        writeln!(f, "}}")?;
+                    }
+                    writeln!(f, "panic!(\"invalid message!\")")?;
+                    writeln!(f, "}}")?;
+                }
+
+                if (trans.dir == Direction::AToB && role == SimpleRole::A)
+                    || (trans.dir == Direction::BToA && role == SimpleRole::B)
+                {
+                    writeln!(f, "impl<C: Channel<Error = E>, E> {}<C> {{", state.name)?;
+
+                    for msg in &trans.messages {
+                        writeln!(
+                            f,
+                            "pub fn send_{}(mut self, {}) -> Result<{}<C>, E> {{",
+                            msg.label, msg.payload, msg.dest_state_name
+                        )?;
+                        writeln!(f, "self.0.send_u8({})?;", msg.id)?;
+
+                        for (name, ty) in &msg.payload.items {
+                            send_type(f, name, ty)?;
+                        }
+
+                        writeln!(f, "Ok({}(self.0))", msg.dest_state_name)?;
+
+                        writeln!(f, "}}")?;
+                    }
+                }
+                writeln!(f, "}}")?;
+            }
+            None => {
+                writeln!(f, "impl<C: Channel<Error = E>, E> {}<C> {{", state.name)?;
+                writeln!(f, "pub fn finish(self) {{}}")?;
+                writeln!(f, "}}")?;
+            }
+        }
     }
 
-    Protocol {
-        name: protocol.name.clone(),
-        role_a: a,
-        role_b: b,
-        states,
+    writeln!(f, "impl<C: Channel> S0<C> {{")?;
+    writeln!(f, "pub fn new(channel: C) -> S0<C> {{")?;
+    writeln!(f, "S0(channel)")?;
+    writeln!(f, "}}")?;
+    writeln!(f, "}}")?;
+
+    Ok(())
+}
+
+fn generate_protocol_file(f: &mut fmt::Formatter<'_>, file: &ProtocolFile) -> fmt::Result {
+    for protocol in &file.protocols {
+        writeln!(f, "pub mod {} {{", protocol.name)?;
+
+        writeln!(f, "pub mod {} {{", protocol.role_a)?;
+        generate_protocol(f, protocol, SimpleRole::A)?;
+        writeln!(f, "}}")?;
+
+        writeln!(f, "pub mod {} {{", protocol.role_b)?;
+        generate_protocol(f, protocol, SimpleRole::B)?;
+        writeln!(f, "}}")?;
+
+        writeln!(f, "}}")?;
+    }
+
+    Ok(())
+}
+
+pub struct GenerateRust<'a>(pub &'a ProtocolFile);
+
+impl<'a> fmt::Display for GenerateRust<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        generate_protocol_file(f, self.0)
     }
 }

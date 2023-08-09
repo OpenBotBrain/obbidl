@@ -2,10 +2,9 @@ use std::{env, fs, path::Path};
 
 use ast::ProtocolFile;
 use compile::compile_protocol_file;
-use generate::generate_rust_bindings;
 use parser::parse;
 
-use crate::{generate::validate_protocol_file, test::GenerateRust};
+use crate::{generate::GenerateRust, validate::validate_protocol_file};
 
 mod ast;
 pub mod channel;
@@ -16,8 +15,8 @@ mod lexer;
 mod parser;
 mod report;
 mod state_machine;
-mod test;
 mod token;
+mod validate;
 
 pub fn build(path: impl AsRef<Path>) {
     let path = path.as_ref();
@@ -33,7 +32,13 @@ pub fn build(path: impl AsRef<Path>) {
         }
     };
     let file = compile_protocol_file(&file);
-    let file = validate_protocol_file(&file);
+    let file = match validate_protocol_file(&file) {
+        Ok(file) => file,
+        Err(err) => {
+            println!("{}", err);
+            panic!()
+        }
+    };
     let output = GenerateRust(&file).to_string();
     let file_name = path.file_name().unwrap();
 
