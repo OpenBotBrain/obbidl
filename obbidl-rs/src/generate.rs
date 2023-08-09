@@ -119,6 +119,10 @@ fn generate_protocol(
                     }
                     writeln!(f, "}}")?;
 
+                    // writeln!(f, "pub enum {}Response<C> {{", state.name)?;
+
+                    // writeln!(f, "}}")?;
+
                     writeln!(f, "impl<C: Channel<Error = E>, E> {}<C> {{", state.name)?;
                     writeln!(f, "pub fn recv<T>(mut self, receiver: impl {}Receiver<C, E, Type = T>) -> Result<T, E> {{", state.name)?;
                     writeln!(f, "let id = self.0.recv_u8()?;")?;

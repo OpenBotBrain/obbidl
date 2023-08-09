@@ -98,7 +98,7 @@ pub enum Error {
 
 impl fmt::Display for ErrorInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "validation error in protocol {}", self.name)?;
+        writeln!(f, "validation error in protocol {}:", self.name)?;
         match self.err {
             Error::IncorrectNumberOfRoles => write!(f, "there must be two roles in the protocol"),
             Error::InvalidDirection => write!(f, "there is a message sending something from and to the same role"),
@@ -173,61 +173,6 @@ pub fn validate_protocol(protocol: &ProtocolStateMachine) -> Result<Protocol, Er
                 None => None,
             },
         })
-
-        // let mut dir_iter = protocol
-        //     .state_machine
-        //     .iter_trans_from(state)
-        //     .map(|(msg, _)| {
-        //         if msg.from == a && msg.to == b {
-        //             Ok(Direction::AToB)
-        //         } else if msg.from == b && msg.to == a {
-        //             Ok(Direction::BToA)
-        //         } else {
-        //             Err(Error::InvalidDirection)
-        //         }
-        //     });
-
-        // let mut labels = HashSet::new();
-        // for (msg, _) in protocol.state_machine.iter_trans_from(state) {
-        //     if !labels.insert(msg.label.as_str()) {
-        //         panic!()
-        //     }
-        // }
-
-        // let trans = if let Some(dir) = dir_iter.next() {
-        //     if !dir_iter.all(|d| d == dir) {
-        //         panic!()
-        //     }
-
-        //     let messages = protocol
-        //         .state_machine
-        //         .iter_trans_from(state)
-        //         .enumerate()
-        //         .map(|(index, (msg, state))| Message {
-        //             label: msg.label.clone(),
-        //             id: index as u8,
-        //             payload: Payload {
-        //                 items: msg
-        //                     .payload
-        //                     .items
-        //                     .iter()
-        //                     .enumerate()
-        //                     .map(|(index, (name, ty))| {
-        //                         (
-        //                             name.clone().unwrap_or_else(|| format!("param{}", index)),
-        //                             ty.clone(),
-        //                         )
-        //                     })
-        //                     .collect(),
-        //             },
-        //             dest_state_name: state.name(),
-        //         })
-        //         .collect();
-
-        //     Some(Transitions { dir, messages })
-        // } else {
-        //     None
-        // };
     }
 
     Ok(Protocol {

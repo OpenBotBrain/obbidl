@@ -1,3 +1,7 @@
-protocol test(role C, role S) {
-    list(u8[]) from C to S;
+protocol test(role C) {
+    choice {
+        x from C to C;
+    } or {
+        x from C to S;
+    }
 }

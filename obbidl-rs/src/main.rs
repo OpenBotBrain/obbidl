@@ -24,14 +24,12 @@ mod token;
 mod validate;
 
 fn main() -> ExitCode {
-    let args: Vec<String> = env::args().collect();
-
     let mut graph = false;
     let mut path = None;
     let mut svg = false;
     let mut output_path = None;
 
-    for arg in args {
+    for arg in env::args().skip(1) {
         match arg.as_str() {
             "--graph" => graph = true,
             "--svg" => svg = true,
