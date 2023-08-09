@@ -66,7 +66,6 @@ fn main() -> ExitCode {
                 println!("cannot create temporary file");
                 return ExitCode::FAILURE;
             }
-            println!("{}", graph_path.display());
             let output = Command::new("dot")
                 .arg("-Tsvg")
                 .arg(&graph_path)
