@@ -1,7 +1,3 @@
 protocol test(role C, role S) {
-    choice {
-        x(u32, u32) from C to S;
-    } or {
-        y from C to S;
-    }
+    x(u32[]) from C to S;
 }

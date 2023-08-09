@@ -27,10 +27,36 @@ impl fmt::Display for Type {
             Type::Bool => write!(f, "bool"),
             Type::Int(ty) => write!(f, "{}", ty),
             Type::Array(ty, size) => match size {
+                Some(size) => write!(f, "[{}; {}]", ty, size),
+                None => write!(f, "Vec<{}>", ty),
+            },
+        }
+    }
+}
+
+struct BorrowedType<'a>(&'a Type);
+
+impl<'a> fmt::Display for BorrowedType<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.0 {
+            Type::Bool => write!(f, "bool"),
+            Type::Int(ty) => write!(f, "{}", ty),
+            Type::Array(ty, size) => match size {
                 Some(size) => write!(f, "&[{}; {}]", ty, size),
                 None => write!(f, "&[{}]", ty),
             },
         }
+    }
+}
+
+struct BorrowedPayload<'a>(&'a Payload);
+
+impl<'a> fmt::Display for BorrowedPayload<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (name, ty) in &self.0.items {
+            write!(f, "{}: {}, ", name, BorrowedType(ty))?;
+        }
+        Ok(())
     }
 }
 
@@ -60,18 +86,18 @@ fn recv_type(f: &mut fmt::Formatter<'_>, name: &str, ty: &Type) -> fmt::Result {
         }
         Type::Array(ty, size) => {
             match size {
-                Some(size) => writeln!(f, "let mut {}_ = [{}::default(); {}];", name, ty, size)?,
+                Some(size) => writeln!(f, "let mut {} = [{}::default(); {}];", name, ty, size)?,
                 None => writeln!(
                     f,
-                    "let mut {}_ = vec![{}::default(); self.0.recv_u32()? as usize];",
+                    "let mut {} = vec![{}::default(); self.0.recv_u32()? as usize];",
                     name, ty
                 )?,
             }
-            writeln!(f, "for i in 0..{}_.len() {{", name)?;
+            writeln!(f, "for i in 0..{}.len() {{", name)?;
             recv_type(f, "x", ty)?;
-            writeln!(f, "{}_[i] = x;", name)?;
+            writeln!(f, "{}[i] = x;", name)?;
             writeln!(f, "}}")?;
-            writeln!(f, "let {} = {}_.as_slice();", name, name)?;
+            // writeln!(f, "let {} = {}_.as_slice();", name, name)?;
         }
     }
     Ok(())
@@ -170,7 +196,9 @@ fn generate_protocol(
                         writeln!(
                             f,
                             "pub fn send_{}(mut self, {}) -> Result<{}<C>, E> {{",
-                            msg.label, msg.payload, msg.dest_state_name
+                            msg.label,
+                            BorrowedPayload(&msg.payload),
+                            msg.dest_state_name
                         )?;
                         writeln!(f, "self.0.send_u8({})?;", msg.id)?;
 

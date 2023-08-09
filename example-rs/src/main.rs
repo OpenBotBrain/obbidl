@@ -31,7 +31,7 @@ struct Response;
 impl<C: Channel<Error = E>, E> c::S1Receiver<C, E> for Response {
     type Type = (Vec<u32>, Vec<u32>);
 
-    fn recv_ret(self, state: c::S2<C>, a: &[u32], b: &[u32]) -> Result<Self::Type, E> {
+    fn recv_ret(self, state: c::S2<C>, a: Vec<u32>, b: Vec<u32>) -> Result<Self::Type, E> {
         state.finish();
         Ok((a.iter().copied().collect(), b.iter().copied().collect()))
     }
