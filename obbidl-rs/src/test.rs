@@ -40,7 +40,7 @@ fn send_type(f: &mut fmt::Formatter<'_>, name: &str, ty: &Type) -> fmt::Result {
         Type::Int(ty) => writeln!(f, "self.0.send(&{}::to_be_bytes({}))?;", ty, name)?,
         Type::Array(ty, size) => {
             if size.is_none() {
-                writeln!(f, "self.send(&u32::to_be_bytes({}.len()));", name)?;
+                writeln!(f, "self.0.send(&u32::to_be_bytes({}.len() as u32));", name)?;
             }
             writeln!(f, "for i in 0..{}.len() {{", name)?;
             send_type(f, &format!("{}[i]", name), ty)?;
@@ -60,17 +60,18 @@ fn recv_type(f: &mut fmt::Formatter<'_>, name: &str, ty: &Type) -> fmt::Result {
         }
         Type::Array(ty, size) => {
             match size {
-                Some(size) => writeln!(f, "let {} = [{}::default(); {}];", name, ty, size)?,
+                Some(size) => writeln!(f, "let mut {}_ = [{}::default(); {}];", name, ty, size)?,
                 None => writeln!(
                     f,
-                    "let {} = vec![{}::default(); self.0.recv_u32()];",
+                    "let mut {}_ = vec![{}::default(); self.0.recv_u32()? as usize];",
                     name, ty
                 )?,
             }
-            writeln!(f, "for i in 0..{}.len() {{", name)?;
+            writeln!(f, "for i in 0..{}_.len() {{", name)?;
             recv_type(f, "x", ty)?;
-            writeln!(f, "{}[i] = x;", name)?;
+            writeln!(f, "{}_[i] = x;", name)?;
             writeln!(f, "}}")?;
+            writeln!(f, "let {} = {}_.as_slice();", name, name)?;
         }
     }
     Ok(())

@@ -1,11 +1,11 @@
 protocol test(role c, role s) {
     fin {
         choice {
-            add(u32) from c to s;
+            a(u32) from c to s;
         } or {
-            subtract(u32) from c to s;
+            b(u32) from c to s;
         }
     }
     finish from c to s;
-    total(u32) from s to c;
+    return(a: u32[], b: u32[]) from s to c;
 }

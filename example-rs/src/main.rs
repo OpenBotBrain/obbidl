@@ -4,35 +4,36 @@ use obbidl::channel::{Channel, TestChannel};
 use test::{c, s};
 
 struct Accumulator {
-    total: u32,
+    a: Vec<u32>,
+    b: Vec<u32>,
 }
 
 impl<C: Channel<Error = E>, E> s::S0Receiver<C, E> for Accumulator {
-    type Type = (u32, s::S1<C>);
+    type Type = ((Vec<u32>, Vec<u32>), s::S1<C>);
 
-    fn recv_add(mut self, state: s::S0<C>, a: u32) -> Result<Self::Type, E> {
-        self.total += a;
+    fn recv_a(mut self, state: s::S0<C>, a: u32) -> Result<Self::Type, E> {
+        self.a.push(a);
         state.recv(self)
     }
 
-    fn recv_subtract(mut self, state: s::S0<C>, b: u32) -> Result<Self::Type, E> {
-        self.total -= b;
+    fn recv_b(mut self, state: s::S0<C>, b: u32) -> Result<Self::Type, E> {
+        self.b.push(b);
         state.recv(self)
     }
 
     fn recv_finish(self, state: s::S1<C>) -> Result<Self::Type, E> {
-        Ok((self.total, state))
+        Ok(((self.a, self.b), state))
     }
 }
 
 struct Response;
 
 impl<C: Channel<Error = E>, E> c::S1Receiver<C, E> for Response {
-    type Type = u32;
+    type Type = (Vec<u32>, Vec<u32>);
 
-    fn recv_total(self, state: c::S2<C>, total: u32) -> Result<Self::Type, E> {
+    fn recv_return(self, state: c::S2<C>, a: &[u32], b: &[u32]) -> Result<Self::Type, E> {
         state.finish();
-        Ok(total)
+        Ok((a.iter().copied().collect(), b.iter().copied().collect()))
     }
 }
 
@@ -44,16 +45,22 @@ fn main() {
 
     for i in 0..100 {
         if i % 3 != 0 {
-            client = client.send_add(i * 2).unwrap();
+            client = client.send_a(i * 2).unwrap();
         } else {
-            client = client.send_subtract(i).unwrap();
+            client = client.send_b(i).unwrap();
         }
     }
     let client = client.send_finish().unwrap();
 
-    let (total, server) = server.recv(Accumulator { total: 0 }).unwrap();
-    server.send_total(total).unwrap().finish();
+    let ((a, b), server) = server
+        .recv(Accumulator {
+            a: vec![],
+            b: vec![],
+        })
+        .unwrap();
+    let server = server.send_return(&a, &b).unwrap();
+    server.finish();
 
     let total = client.recv(Response).unwrap();
-    println!("{}", total);
+    println!("{:?}", total);
 }
