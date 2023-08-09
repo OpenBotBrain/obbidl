@@ -97,7 +97,6 @@ fn recv_type(f: &mut fmt::Formatter<'_>, name: &str, ty: &Type) -> fmt::Result {
             recv_type(f, "x", ty)?;
             writeln!(f, "{}[i] = x;", name)?;
             writeln!(f, "}}")?;
-            // writeln!(f, "let {} = {}_.as_slice();", name, name)?;
         }
     }
     Ok(())
@@ -145,23 +144,36 @@ fn generate_protocol(
                     }
                     writeln!(f, "}}")?;
 
-                    // writeln!(f, "pub enum {}Response<C: Channel> {{", state.name)?;
-                    // for msg in &trans.messages {
-                    //     writeln!(f, "{} {{", msg.label)?;
-                    //     writeln!(f, "state: {}<C>, {}", msg.dest_state_name, msg.payload)?;
-                    //     writeln!(f, "}},")?;
-                    // }
-                    // writeln!(f, "}}")?;
+                    writeln!(f, "pub enum {}Response<C: Channel> {{", state.name)?;
+                    for msg in &trans.messages {
+                        writeln!(f, "{} {{", msg.label)?;
+                        writeln!(f, "state: {}<C>, {}", msg.dest_state_name, msg.payload)?;
+                        writeln!(f, "}},")?;
+                    }
+                    writeln!(f, "}}")?;
 
-                    // writeln!(f, "struct {}DefaultReceiver;", state.name)?;
+                    writeln!(f, "struct {}DefaultReceiver;", state.name)?;
 
-                    // writeln!(
-                    //     f,
-                    //     "impl<C: Channel<Error = E>, E> {}Receiver<C, E> for {}DefaultReceiver {{",
-                    //     state.name, state.name
-                    // )?;
-                    // TODO!
-                    // writeln!(f, "}}")?;
+                    writeln!(
+                        f,
+                        "impl<C: Channel<Error = E>, E> {}Receiver<C, E> for {}DefaultReceiver {{",
+                        state.name, state.name
+                    )?;
+                    writeln!(f, "type Type = {}Response<C>;", state.name)?;
+                    for msg in &trans.messages {
+                        writeln!(
+                            f,
+                            "fn recv_{}(self, state: {}<C>, {}) -> Result<Self::Type, E> {{",
+                            msg.label, msg.dest_state_name, msg.payload
+                        )?;
+                        write!(f, "Ok({}Response::{} {{ state, ", state.name, msg.label)?;
+                        for (name, _) in &msg.payload.items {
+                            write!(f, "{}, ", name)?;
+                        }
+                        writeln!(f, "}})")?;
+                        writeln!(f, "}}")?;
+                    }
+                    writeln!(f, "}}")?;
 
                     writeln!(f, "impl<C: Channel<Error = E>, E> {}<C> {{", state.name)?;
                     writeln!(f, "pub fn recv<T>(mut self, receiver: impl {}Receiver<C, E, Type = T>) -> Result<T, E> {{", state.name)?;
@@ -184,6 +196,14 @@ fn generate_protocol(
                         writeln!(f, "}}")?;
                     }
                     writeln!(f, "panic!(\"invalid message!\")")?;
+                    writeln!(f, "}}")?;
+
+                    writeln!(
+                        f,
+                        "pub fn recv_default(self) -> Result<{}Response<C>, E> {{",
+                        state.name
+                    )?;
+                    writeln!(f, "self.recv({}DefaultReceiver)", state.name)?;
                     writeln!(f, "}}")?;
                 }
 
