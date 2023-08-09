@@ -2,6 +2,7 @@ use std::{
     cell::RefCell,
     collections::VecDeque,
     io::{self, Read, Write},
+    mem::size_of,
     net::TcpStream,
     rc::{Rc, Weak},
 };
@@ -19,6 +20,12 @@ pub trait Channel {
     }
     fn send_u8(&mut self, data: u8) -> Result<(), Self::Error> {
         self.send(&[data])
+    }
+
+    fn recv_u32(&mut self) -> Result<u32, Self::Error> {
+        let mut bytes = [0; size_of::<u32>()];
+        self.recv(&mut bytes)?;
+        Ok(u32::from_be_bytes(bytes))
     }
 }
 

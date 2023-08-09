@@ -1,8 +1,3 @@
 protocol test(role C, role S) {
-    choice {
-        x(a: i32) from C to S;
-    } or {
-        y(b: i32) from C to S;
-    }
-    z(x: u16) from S to C;
+    list(u8[]) from C to S;
 }

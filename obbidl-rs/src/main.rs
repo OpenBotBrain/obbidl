@@ -7,8 +7,9 @@ use std::{
 
 use ast::ProtocolFile;
 use compile::compile_protocol_file;
-use generate::generate_rust_bindings;
+use generate::{generate_rust_bindings, validate_protocol_file};
 use parser::parse;
+use test::GenerateRust;
 
 mod ast;
 mod channel;
@@ -19,6 +20,7 @@ mod lexer;
 mod parser;
 mod report;
 mod state_machine;
+mod test;
 mod token;
 
 fn main() -> ExitCode {
@@ -81,7 +83,9 @@ fn main() -> ExitCode {
             println!("flag --svg must be used with flag --graph");
             return ExitCode::FAILURE;
         }
-        let output = generate_rust_bindings(&file);
+        let file = validate_protocol_file(&file);
+        let output = GenerateRust(&file).to_string();
+
         let child = Command::new("rustfmt")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

@@ -14,7 +14,6 @@
             bool
         {% when Type::Array with (ty, size) %}
             todo!()
-            &[{% call type(ty) %}]
             {# {% match size %}
                 {% when Some with (size) %}
                     &[{% call type(ty) %}; {{ size }}]

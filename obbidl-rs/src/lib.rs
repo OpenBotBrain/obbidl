@@ -5,6 +5,8 @@ use compile::compile_protocol_file;
 use generate::generate_rust_bindings;
 use parser::parse;
 
+use crate::{generate::validate_protocol_file, test::GenerateRust};
+
 mod ast;
 pub mod channel;
 mod compile;
@@ -14,6 +16,7 @@ mod lexer;
 mod parser;
 mod report;
 mod state_machine;
+mod test;
 mod token;
 
 pub fn build(path: impl AsRef<Path>) {
@@ -30,7 +33,8 @@ pub fn build(path: impl AsRef<Path>) {
         }
     };
     let file = compile_protocol_file(&file);
-    let output = generate_rust_bindings(&file);
+    let file = validate_protocol_file(&file);
+    let output = GenerateRust(&file).to_string();
     let file_name = path.file_name().unwrap();
 
     fs::write(

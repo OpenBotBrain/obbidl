@@ -14,52 +14,52 @@ struct RustTemplate {
 
 #[derive(Debug, Clone)]
 pub struct ProtocolFile {
-    protocols: Vec<Protocol>,
+    pub protocols: Vec<Protocol>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Protocol {
-    name: String,
-    role_a: Role,
-    role_b: Role,
-    states: Vec<State>,
+    pub name: String,
+    pub role_a: Role,
+    pub role_b: Role,
+    pub states: Vec<State>,
 }
 
 #[derive(Debug, Clone)]
-struct State {
-    name: StateName,
-    trans: Option<Transitions>,
+pub struct State {
+    pub name: StateName,
+    pub trans: Option<Transitions>,
 }
 
 #[derive(Debug, Clone)]
-struct Transitions {
-    dir: Direction,
-    messages: Vec<Message>,
+pub struct Transitions {
+    pub dir: Direction,
+    pub messages: Vec<Message>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum Direction {
+pub enum Direction {
     BToA,
     AToB,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum SimpleRole {
+pub enum SimpleRole {
     A,
     B,
 }
 
 #[derive(Debug, Clone)]
-struct Message {
-    label: String,
-    id: u8,
-    payload: Payload,
-    dest_state_name: StateName,
+pub struct Message {
+    pub label: String,
+    pub id: u8,
+    pub payload: Payload,
+    pub dest_state_name: StateName,
 }
 
 #[derive(Debug, Clone)]
-struct Payload {
-    items: Vec<(String, Type)>,
+pub struct Payload {
+    pub items: Vec<(String, Type)>,
 }
 
 pub fn generate_rust_bindings(file: &ProtocolFileStateMachines) -> String {
