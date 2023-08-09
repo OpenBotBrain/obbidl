@@ -7,7 +7,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Template)]
-#[template(path = "rust.jinja")]
+#[template(path = "rust.jinja", whitespace = "minimize")]
 struct RustTemplate {
     file: ProtocolFile,
 }

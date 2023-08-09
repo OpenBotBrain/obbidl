@@ -1,8 +1,4 @@
-use std::{
-    env, fs,
-    path::Path,
-    process::{self, ExitCode},
-};
+use std::{env, fs, path::Path};
 
 use ast::ProtocolFile;
 use compile::compile_protocol_file;

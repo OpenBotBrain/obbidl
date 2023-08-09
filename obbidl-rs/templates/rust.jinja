@@ -8,18 +8,52 @@
 {% endmatch %}
 {% endmacro %}
 
+{% macro type(ty) %}
+    {% match ty %}
+        {% when Type::Bool %}
+            bool
+        {% when Type::Array with (ty, size) %}
+            todo!()
+            &[{% call type(ty) %}]
+            {# {% match size %}
+                {% when Some with (size) %}
+                    &[{% call type(ty) %}; {{ size }}]
+                {% when None %}
+                    &[{% call type(ty) %}]
+            {% endmatch %} #}
+        {% when Type::Int with (ty) %}
+            {% call int_type(ty) %}
+    {% endmatch %}
+{% endmacro %}
+
 {% macro params(payload) %}
     {% for (name, ty) in payload.items %}
-        {{name}}:
-        {% match ty %}
-            {% when Type::Bool %}
-            bool
-            {% when Type::String %}
-            &str
-            {% when Type::Int with (ty) %}
-            {% call int_type(ty) %}
-        {% endmatch %},
+        {{name}}: {% call type(ty) %},
     {% endfor %}
+{% endmacro %}
+
+{% macro send_ty(name, ty) %}
+    {% match ty %}
+        {% when Type::Bool %}
+            self.0.send_u8(if {{ name }} { 1 } else { 0 })?;
+        {% when Type::Int with (ty) %}
+            self.0.send(&{% call int_type(ty) %}::to_be_bytes({{ name }}))?;
+        {% when Type::Array with (ty, size) %}
+            todo!()
+    {% endmatch %}
+{% endmacro %}
+
+{% macro recv_ty(name, ty) %}
+    {% match ty %}
+        {% when Type::Bool %}
+            let {{ name }} = self.0.recv_u8()? != 0;
+        {% when Type::Int with (ty) %}
+            let mut bytes = [0; size_of::<{% call int_type(ty) %}>()];
+            self.0.recv(&mut bytes)?;
+            let {{ name }} = {% call int_type(ty) %}::from_be_bytes(bytes);
+        {% when Type::Array with (ty, size) %}
+            todo!()
+    {% endmatch %}
 {% endmacro %}
 
 {% macro protocol(protocol, role) %}
@@ -53,16 +87,7 @@ impl<C: Channel<Error = E>, E> {{ state.name }}<C> {
         {% for msg in trans.messages %}
         if id == {{ msg.id }} {
             {% for (name, ty) in msg.payload.items %}
-            {% match ty %}
-            {% when Type::Bool %}
-            let {{ name }} = self.0.recv_u8()? != 0;
-            {% when Type::Int with (ty) %}
-            let mut bytes = [0; size_of::<{% call int_type(ty) %}>()];
-            self.0.recv(&mut bytes)?;
-            let {{ name }} = {% call int_type(ty) %}::from_be_bytes(bytes);
-            {% when Type::String %}
-            todo!()
-            {% endmatch %}
+                {% call recv_ty(name, ty) %}
             {% endfor %}
 
             return Ok(receiver.recv_{{ msg.label }}({{ msg.dest_state_name }}(self.0),
@@ -86,14 +111,7 @@ impl<C: Channel<Error = E>, E> {{ state.name }}<C> {
         self.0.send_u8({{ msg.id }})?;
 
         {% for (name, ty) in msg.payload.items %}
-        {% match ty %}
-        {% when Type::Bool %}
-        self.0.send_u8(if {{ name }} { 1 } else { 0 })?;
-        {% when Type::Int with (ty) %}
-        self.0.send(&{% call int_type(ty) %}::to_be_bytes({{ name }}))?;
-        {% when Type::String %}
-        todo!()
-        {% endmatch %}
+            {% call send_ty(name, ty) %}
         {% endfor %}
 
         Ok({{ msg.dest_state_name }}(self.0))

@@ -60,6 +60,14 @@ impl<'a> Lexer<'a> {
             return TokenType::Ident;
         }
 
+        if ch.is_numeric() {
+            self.next_char();
+            while self.peek_char().map_or(false, |ch| ch.is_numeric()) {
+                self.next_char();
+            }
+            return TokenType::Integer;
+        }
+
         for symbol in Symbol::iter() {
             if symbol.as_char() == ch {
                 self.next_char();

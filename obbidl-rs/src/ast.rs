@@ -62,11 +62,12 @@ pub struct Message {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Role(pub String);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
     Bool,
     Int(IntType),
-    String,
+    Array(Box<Type>, Option<u64>),
+    // String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -200,35 +201,43 @@ impl Parse for Message {
 
 impl Parse for Type {
     fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
-        if parser
+        let mut ty = if parser
             .eat_token(TokenType::Keyword(Keyword::Bool))
             .is_some()
         {
-            Ok(Type::Bool)
-        } else if parser
-            .eat_token(TokenType::Keyword(Keyword::String))
+            Type::Bool
+        } else if parser.eat_token(TokenType::Keyword(Keyword::U64)).is_some() {
+            Type::Int(IntType::U64)
+        } else if parser.eat_token(TokenType::Keyword(Keyword::U32)).is_some() {
+            Type::Int(IntType::U32)
+        } else if parser.eat_token(TokenType::Keyword(Keyword::U16)).is_some() {
+            Type::Int(IntType::U16)
+        } else if parser.eat_token(TokenType::Keyword(Keyword::U8)).is_some() {
+            Type::Int(IntType::U8)
+        } else if parser.eat_token(TokenType::Keyword(Keyword::I64)).is_some() {
+            Type::Int(IntType::I64)
+        } else if parser.eat_token(TokenType::Keyword(Keyword::I32)).is_some() {
+            Type::Int(IntType::I32)
+        } else if parser.eat_token(TokenType::Keyword(Keyword::I16)).is_some() {
+            Type::Int(IntType::I16)
+        } else if parser.eat_token(TokenType::Keyword(Keyword::I8)).is_some() {
+            Type::Int(IntType::I8)
+        } else {
+            return Err(parser.invalid_token());
+        };
+        while parser
+            .eat_token(TokenType::Symbol(Symbol::OpenSquareBrace))
             .is_some()
         {
-            Ok(Type::String)
-        } else if parser.eat_token(TokenType::Keyword(Keyword::U64)).is_some() {
-            Ok(Type::Int(IntType::U64))
-        } else if parser.eat_token(TokenType::Keyword(Keyword::U32)).is_some() {
-            Ok(Type::Int(IntType::U32))
-        } else if parser.eat_token(TokenType::Keyword(Keyword::U16)).is_some() {
-            Ok(Type::Int(IntType::U16))
-        } else if parser.eat_token(TokenType::Keyword(Keyword::U8)).is_some() {
-            Ok(Type::Int(IntType::U8))
-        } else if parser.eat_token(TokenType::Keyword(Keyword::I64)).is_some() {
-            Ok(Type::Int(IntType::I64))
-        } else if parser.eat_token(TokenType::Keyword(Keyword::I32)).is_some() {
-            Ok(Type::Int(IntType::I32))
-        } else if parser.eat_token(TokenType::Keyword(Keyword::I16)).is_some() {
-            Ok(Type::Int(IntType::I16))
-        } else if parser.eat_token(TokenType::Keyword(Keyword::I8)).is_some() {
-            Ok(Type::Int(IntType::I8))
-        } else {
-            Err(parser.invalid_token())
+            let size = if let Some(value) = parser.eat_token(TokenType::Integer) {
+                Some(value.parse().unwrap())
+            } else {
+                None
+            };
+            parser.expect_token(TokenType::Symbol(Symbol::CloseSquareBrace))?;
+            ty = Type::Array(Box::new(ty), size)
         }
+        Ok(ty)
     }
 }
 

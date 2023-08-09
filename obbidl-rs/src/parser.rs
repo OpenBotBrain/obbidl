@@ -34,6 +34,7 @@ impl fmt::Display for TokenTypeName {
             TokenType::Symbol(symbol) => write!(f, "the symbol '{}'", symbol.as_char()),
             TokenType::End => write!(f, "the end of the input"),
             TokenType::Invalid => panic!(),
+            TokenType::Integer => write!(f, "an integer"),
         }
     }
 }
@@ -48,6 +49,7 @@ impl<'a> fmt::Display for TokenName<'a> {
             TokenType::Symbol(symbol) => write!(f, "the symbol '{}'", symbol.as_char()),
             TokenType::Invalid => write!(f, "the invalid character '{}'", self.0.contents),
             TokenType::End => write!(f, "the end of the input"),
+            TokenType::Integer => write!(f, "the integer '{}'", self.0.contents),
         }
     }
 }

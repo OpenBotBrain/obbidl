@@ -10,6 +10,7 @@ pub struct Token<'a> {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TokenType {
     Ident,
+    Integer,
     Keyword(Keyword),
     Symbol(Symbol),
     Invalid,
@@ -49,6 +50,8 @@ pub enum Symbol {
     Semicolon,
     Colon,
     Comma,
+    OpenSquareBrace,
+    CloseSquareBrace,
 }
 
 impl Keyword {
@@ -88,6 +91,8 @@ impl Symbol {
             Symbol::Semicolon => ';',
             Symbol::Colon => ':',
             Symbol::Comma => ',',
+            Symbol::OpenSquareBrace => '[',
+            Symbol::CloseSquareBrace => ']',
         }
     }
 }
