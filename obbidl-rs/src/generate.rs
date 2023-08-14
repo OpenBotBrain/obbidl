@@ -30,6 +30,7 @@ impl fmt::Display for Type {
                 Some(size) => write!(f, "[{}; {}]", ty, size),
                 None => write!(f, "Vec<{}>", ty),
             },
+            Type::Struct(_) => todo!(),
         }
     }
 }
@@ -45,6 +46,7 @@ impl<'a> fmt::Display for BorrowedType<'a> {
                 Some(size) => write!(f, "&[{}; {}]", ty, size),
                 None => write!(f, "&[{}]", ty),
             },
+            Type::Struct(_) => todo!(),
         }
     }
 }
@@ -72,6 +74,7 @@ fn send_type(f: &mut fmt::Formatter<'_>, name: &str, ty: &Type) -> fmt::Result {
             send_type(f, &format!("{}[i]", name), ty)?;
             writeln!(f, "}}")?;
         }
+        Type::Struct(_) => todo!(),
     }
     Ok(())
 }
@@ -98,6 +101,7 @@ fn recv_type(f: &mut fmt::Formatter<'_>, name: &str, ty: &Type) -> fmt::Result {
             writeln!(f, "{}[i] = x;", name)?;
             writeln!(f, "}}")?;
         }
+        Type::Struct(_) => todo!(),
     }
     Ok(())
 }

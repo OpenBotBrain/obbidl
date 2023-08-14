@@ -16,6 +16,12 @@ pub struct Protocol {
     pub seq: Sequence,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Struct {
+    pub name: String,
+    pub items: Vec<(String, Type)>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Sequence(pub Vec<Stmt>);
 
@@ -67,7 +73,7 @@ pub enum Type {
     Bool,
     Int(IntType),
     Array(Box<Type>, Option<u64>),
-    // String,
+    Struct(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -199,6 +205,29 @@ impl Parse for Message {
     }
 }
 
+impl Parse for Struct {
+    fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
+        parser.expect_token(TokenType::Keyword(Keyword::Struct))?;
+        let name = parser.expect_token(TokenType::Ident)?.to_string();
+        parser.expect_token(TokenType::Symbol(Symbol::OpenCurlyBrace))?;
+        let mut items = vec![];
+        while parser
+            .eat_token(TokenType::Symbol(Symbol::CloseCurlyBrace))
+            .is_none()
+        {
+            let field_name = parser.expect_token(TokenType::Ident)?.to_string();
+            parser.expect_token(TokenType::Symbol(Symbol::Colon))?;
+            let ty = parser.parse::<Type>()?;
+            items.push((field_name, ty));
+            if parser.eat_token(TokenType::Symbol(Symbol::Comma)).is_none() {
+                parser.expect_token(TokenType::Symbol(Symbol::CloseCurlyBrace))?;
+                break;
+            }
+        }
+        Ok(Struct { name, items })
+    }
+}
+
 impl Parse for Type {
     fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
         let mut ty = if parser
@@ -222,6 +251,8 @@ impl Parse for Type {
             Type::Int(IntType::I16)
         } else if parser.eat_token(TokenType::Keyword(Keyword::I8)).is_some() {
             Type::Int(IntType::I8)
+        } else if let Some(token) = parser.eat_token(TokenType::Ident) {
+            Type::Struct(token.to_string())
         } else {
             return Err(parser.invalid_token());
         };
@@ -335,7 +366,7 @@ impl Parse for ProtocolFile {
 #[cfg(test)]
 mod tests {
     use crate::{
-        ast::{IntSize, IntType, Message, Payload, Type},
+        ast::{IntSize, IntType, Message, Payload, Struct, Type},
         parser::parse,
         report::Report,
     };
@@ -378,6 +409,21 @@ mod tests {
                 },
                 from: role("Y"),
                 to: role("Z"),
+            }
+        )
+    }
+
+    #[test]
+    fn test_parse_struct() {
+        let struct_ = parse::<Struct>("struct Point { x: u32, y: u32 }").report();
+        assert_eq!(
+            struct_,
+            Struct {
+                name: "Point".to_string(),
+                items: vec![
+                    ("x".to_string(), Type::Int(IntType::U32)),
+                    ("y".to_string(), Type::Int(IntType::U32))
+                ]
             }
         )
     }

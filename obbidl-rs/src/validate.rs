@@ -8,11 +8,11 @@ use crate::{
     state_machine::StateName,
 };
 
-#[derive(Debug, Clone, Template)]
-#[template(path = "rust.jinja", whitespace = "minimize")]
-struct RustTemplate {
-    file: ProtocolFile,
-}
+// #[derive(Debug, Clone, Template)]
+// #[template(path = "rust.jinja", whitespace = "minimize")]
+// struct RustTemplate {
+//     file: ProtocolFile,
+// }
 
 #[derive(Debug, Clone)]
 pub struct ProtocolFile {

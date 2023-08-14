@@ -39,6 +39,7 @@ pub enum Keyword {
     I32,
     I16,
     I8,
+    Struct,
 }
 
 #[derive(Debug, Clone, Copy, EnumIter, PartialEq)]
@@ -77,6 +78,7 @@ impl Keyword {
             Keyword::I64 => "i64",
             Keyword::I16 => "i16",
             Keyword::I8 => "i8",
+            Keyword::Struct => "struct",
         }
     }
 }
