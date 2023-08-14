@@ -1,6 +1,6 @@
 use std::{env, fs, path::Path};
 
-use ast::ProtocolFile;
+use ast::File;
 use compile::compile_protocol_file;
 use parser::parse;
 
@@ -24,7 +24,7 @@ pub fn build(path: impl AsRef<Path>) {
 
     let out_dir = env::var("OUT_DIR").unwrap();
     let source = fs::read_to_string(path).unwrap();
-    let file = match parse::<ProtocolFile>(&source) {
+    let file = match parse::<File>(&source) {
         Ok(ast) => ast,
         Err(err) => {
             print!("{}", err);

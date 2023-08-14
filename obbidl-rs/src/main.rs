@@ -5,7 +5,7 @@ use std::{
     process::{Command, ExitCode, Stdio},
 };
 
-use ast::ProtocolFile;
+use ast::File;
 use compile::compile_protocol_file;
 use generate::GenerateRust;
 use parser::parse;
@@ -49,7 +49,7 @@ fn main() -> ExitCode {
     };
 
     let source = fs::read_to_string(path).unwrap();
-    let file = match parse::<ProtocolFile>(&source) {
+    let file = match parse::<File>(&source) {
         Ok(ast) => ast,
         Err(err) => {
             println!("{}", err);
@@ -88,8 +88,6 @@ fn main() -> ExitCode {
             }
         };
         let output = GenerateRust(&file).to_string();
-
-        println!("{}", output);
 
         let child = Command::new("rustfmt")
             .stdin(Stdio::piped())

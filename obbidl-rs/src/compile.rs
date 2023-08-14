@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::{
-    ast::{Message, Protocol, ProtocolFile, Role, Sequence, Sequences, Stmt},
+    ast::{File, Message, Protocol, Role, Sequence, Sequences, Stmt},
     state_machine::{StateMachine, Transition},
 };
 
@@ -19,7 +19,7 @@ pub struct ProtocolFileStateMachines {
 
 const DEFAULT_ROLES: &[&str] = &["C", "S"];
 
-pub fn compile_protocol_file(file: &ProtocolFile) -> ProtocolFileStateMachines {
+pub fn compile_protocol_file(file: &File) -> ProtocolFileStateMachines {
     let mut protocols = vec![];
     for protocol in &file.protocols {
         protocols.push(compile_protocol(protocol))

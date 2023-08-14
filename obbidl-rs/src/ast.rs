@@ -126,8 +126,9 @@ pub enum IntSize {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ProtocolFile {
+pub struct File {
     pub protocols: Vec<Protocol>,
+    pub structs: Vec<Struct>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -353,13 +354,20 @@ impl fmt::Display for Role {
     }
 }
 
-impl Parse for ProtocolFile {
+impl Parse for File {
     fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
         let mut protocols = vec![];
+        let mut structs = vec![];
         while parser.eat_token(TokenType::End).is_none() {
-            protocols.push(parser.parse()?)
+            if let Some(protocol) = parser.parse_maybe::<Protocol>()? {
+                protocols.push(protocol);
+            } else if let Some(struct_) = parser.parse_maybe::<Struct>()? {
+                structs.push(struct_);
+            } else {
+                return Err(parser.invalid_token());
+            }
         }
-        Ok(ProtocolFile { protocols })
+        Ok(File { protocols, structs })
     }
 }
 

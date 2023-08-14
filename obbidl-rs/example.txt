@@ -1,3 +1,8 @@
+struct Point {
+    x: u32,
+    y: u32,
+}
+
 protocol test(role C, role S) {
     choice {
         x(u32, u32) from C to S;
