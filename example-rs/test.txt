@@ -1,8 +1,5 @@
-struct Point {
-    x: u32,
-    y: u32,
-}
-
 protocol test(role cli, role ser) {
-    send(struct Point) from ser to cli;
+    a(u32) from cli to ser;
+    b(u32) from cli to ser;
+    c(u32) from ser to cli;
 }

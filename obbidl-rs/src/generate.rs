@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::{
     ast::{IntSize, IntType},
-    validate::{Direction, File, Payload, Protocol, SimpleRole, Type},
+    validate::{Direction, File, Message, Payload, Protocol, SimpleRole, Type},
 };
 
 impl fmt::Display for IntType {
@@ -128,6 +128,23 @@ impl fmt::Display for Payload {
     }
 }
 
+fn recv_msg(f: &mut fmt::Formatter<'_>, msg: &Message) -> fmt::Result {
+    for (name, ty) in &msg.payload.items {
+        recv_type(f, name, ty)?;
+    }
+
+    write!(
+        f,
+        "return Ok(receiver.recv_{}({}(self.0), ",
+        msg.label, msg.dest_state_name
+    )?;
+    for (name, _) in &msg.payload.items {
+        write!(f, "{}, ", name)?;
+    }
+    writeln!(f, ")?);")?;
+    Ok(())
+}
+
 fn generate_protocol(
     f: &mut fmt::Formatter<'_>,
     protocol: &Protocol,
@@ -195,25 +212,17 @@ fn generate_protocol(
 
                     writeln!(f, "impl<C: Channel<Error = E>, E> {}<C> {{", state.name)?;
                     writeln!(f, "pub fn recv<T>(mut self, receiver: impl {}Receiver<C, E, Type = T>) -> Result<T, E> {{", state.name)?;
-                    writeln!(f, "let id = self.0.recv_u8()?;")?;
-                    for msg in &trans.messages {
-                        writeln!(f, "if id == {} {{", msg.id)?;
-                        for (name, ty) in &msg.payload.items {
-                            recv_type(f, name, ty)?;
+                    if trans.messages.len() == 1 {
+                        recv_msg(f, &trans.messages[0])?;
+                    } else {
+                        writeln!(f, "let id = self.0.recv_u8()?;")?;
+                        for msg in &trans.messages {
+                            writeln!(f, "if id == {} {{", msg.id)?;
+                            recv_msg(f, msg)?;
+                            writeln!(f, "}}")?;
                         }
-
-                        write!(
-                            f,
-                            "return Ok(receiver.recv_{}({}(self.0), ",
-                            msg.label, msg.dest_state_name
-                        )?;
-                        for (name, _) in &msg.payload.items {
-                            write!(f, "{}, ", name)?;
-                        }
-                        writeln!(f, ")?);")?;
-                        writeln!(f, "}}")?;
+                        writeln!(f, "panic!(\"invalid message!\")")?;
                     }
-                    writeln!(f, "panic!(\"invalid message!\")")?;
                     writeln!(f, "}}")?;
 
                     writeln!(
@@ -238,7 +247,9 @@ fn generate_protocol(
                             BorrowedPayload(&msg.payload),
                             msg.dest_state_name
                         )?;
-                        writeln!(f, "self.0.send_u8({})?;", msg.id)?;
+                        if trans.messages.len() > 1 {
+                            writeln!(f, "self.0.send_u8({})?;", msg.id)?;
+                        }
 
                         for (name, ty) in &msg.payload.items {
                             send_type(f, name, ty)?;
@@ -279,8 +290,6 @@ fn generate_protocol_file(f: &mut fmt::Formatter<'_>, file: &File) -> fmt::Resul
 
     for protocol in &file.protocols {
         writeln!(f, "pub mod {} {{", protocol.name)?;
-
-        // writeln!(f, "#![allow(non_camel_case_types)]")?;
 
         writeln!(f, "pub mod {} {{", protocol.role_a)?;
         generate_protocol(f, protocol, SimpleRole::A)?;

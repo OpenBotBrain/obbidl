@@ -68,6 +68,7 @@ impl Channel for TestChannel {
     }
 
     fn send(&mut self, data: &[u8]) -> Result<(), Self::Error> {
+        println!("sending: {:?}", data);
         let rc = self.send.upgrade().ok_or(TestChannelError::Closed)?;
         let mut queue = rc.borrow_mut();
         for byte in data {
