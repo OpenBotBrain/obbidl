@@ -19,7 +19,7 @@ pub struct Protocol {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Struct {
     pub name: String,
-    pub items: Vec<(String, Type)>,
+    pub fields: Vec<(String, Type)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -225,7 +225,10 @@ impl Parse for Struct {
                 break;
             }
         }
-        Ok(Struct { name, items })
+        Ok(Struct {
+            name,
+            fields: items,
+        })
     }
 }
 
@@ -252,8 +255,11 @@ impl Parse for Type {
             Type::Int(IntType::I16)
         } else if parser.eat_token(TokenType::Keyword(Keyword::I8)).is_some() {
             Type::Int(IntType::I8)
-        } else if let Some(token) = parser.eat_token(TokenType::Ident) {
-            Type::Struct(token.to_string())
+        } else if parser
+            .eat_token(TokenType::Keyword(Keyword::Struct))
+            .is_some()
+        {
+            Type::Struct(parser.expect_token(TokenType::Ident)?.to_string())
         } else {
             return Err(parser.invalid_token());
         };
@@ -428,7 +434,7 @@ mod tests {
             struct_,
             Struct {
                 name: "Point".to_string(),
-                items: vec![
+                fields: vec![
                     ("x".to_string(), Type::Int(IntType::U32)),
                     ("y".to_string(), Type::Int(IntType::U32))
                 ]

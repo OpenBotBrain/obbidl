@@ -56,10 +56,10 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let file = compile_protocol_file(&file);
+    let file_fsm = compile_protocol_file(&file);
 
     let output = if graph {
-        let graph = file.graph_viz().to_string();
+        let graph = file_fsm.graph_viz().to_string();
         if svg {
             let graph_path = temp_dir().join("output.dot");
             if fs::write(&graph_path, graph).is_err() {
@@ -80,7 +80,7 @@ fn main() -> ExitCode {
             println!("flag --svg must be used with flag --graph");
             return ExitCode::FAILURE;
         }
-        let file = match validate_protocol_file(&file) {
+        let file = match validate_protocol_file(&file_fsm, &file.structs) {
             Ok(file) => file,
             Err(err) => {
                 println!("{}", err);

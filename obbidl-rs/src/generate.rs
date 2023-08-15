@@ -1,8 +1,8 @@
 use std::fmt;
 
 use crate::{
-    ast::{IntSize, IntType, Type},
-    validate::{Direction, Payload, Protocol, ProtocolFile, SimpleRole},
+    ast::{IntSize, IntType},
+    validate::{Direction, File, Payload, Protocol, SimpleRole, Type},
 };
 
 impl fmt::Display for IntType {
@@ -30,7 +30,7 @@ impl fmt::Display for Type {
                 Some(size) => write!(f, "[{}; {}]", ty, size),
                 None => write!(f, "Vec<{}>", ty),
             },
-            Type::Struct(_) => todo!(),
+            Type::Struct(struct_) => write!(f, "super::super::{}", struct_.name),
         }
     }
 }
@@ -46,7 +46,7 @@ impl<'a> fmt::Display for BorrowedType<'a> {
                 Some(size) => write!(f, "&[{}; {}]", ty, size),
                 None => write!(f, "&[{}]", ty),
             },
-            Type::Struct(_) => todo!(),
+            Type::Struct(struct_) => write!(f, "&super::super::{}", struct_.name),
         }
     }
 }
@@ -74,7 +74,11 @@ fn send_type(f: &mut fmt::Formatter<'_>, name: &str, ty: &Type) -> fmt::Result {
             send_type(f, &format!("{}[i]", name), ty)?;
             writeln!(f, "}}")?;
         }
-        Type::Struct(_) => todo!(),
+        Type::Struct(struct_) => {
+            for (field_name, ty) in &struct_.fields {
+                send_type(f, &format!("{}.{}", name, field_name), ty)?;
+            }
+        }
     }
     Ok(())
 }
@@ -101,7 +105,16 @@ fn recv_type(f: &mut fmt::Formatter<'_>, name: &str, ty: &Type) -> fmt::Result {
             writeln!(f, "{}[i] = x;", name)?;
             writeln!(f, "}}")?;
         }
-        Type::Struct(_) => todo!(),
+        Type::Struct(struct_) => {
+            for (field_name, ty) in &struct_.fields {
+                recv_type(f, &field_name, ty)?;
+            }
+            write!(f, "let {} = super::super::{} {{", name, struct_.name)?;
+            for (field_name, _) in &struct_.fields {
+                write!(f, "{},", field_name)?;
+            }
+            writeln!(f, "}};")?;
+        }
     }
     Ok(())
 }
@@ -254,7 +267,15 @@ fn generate_protocol(
     Ok(())
 }
 
-fn generate_protocol_file(f: &mut fmt::Formatter<'_>, file: &ProtocolFile) -> fmt::Result {
+fn generate_protocol_file(f: &mut fmt::Formatter<'_>, file: &File) -> fmt::Result {
+    for struct_ in &file.structs {
+        writeln!(f, "pub struct {} {{", struct_.name)?;
+        for (name, ty) in &struct_.fields {
+            writeln!(f, "{}: {},", name, ty)?;
+        }
+        writeln!(f, "}}")?;
+    }
+
     for protocol in &file.protocols {
         writeln!(f, "pub mod {} {{", protocol.name)?;
 
@@ -272,7 +293,7 @@ fn generate_protocol_file(f: &mut fmt::Formatter<'_>, file: &ProtocolFile) -> fm
     Ok(())
 }
 
-pub struct GenerateRust<'a>(pub &'a ProtocolFile);
+pub struct GenerateRust<'a>(pub &'a File);
 
 impl<'a> fmt::Display for GenerateRust<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

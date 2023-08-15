@@ -1,9 +1,7 @@
-use std::{collections::HashSet, fmt};
-
-use askama::Template;
+use std::{collections::HashSet, fmt, rc::Rc};
 
 use crate::{
-    ast::{IntSize, Role, Type},
+    ast::{self, IntType, Role},
     compile::{ProtocolFileStateMachines, ProtocolStateMachine},
     state_machine::StateName,
 };
@@ -15,8 +13,9 @@ use crate::{
 // }
 
 #[derive(Debug, Clone)]
-pub struct ProtocolFile {
+pub struct File {
     pub protocols: Vec<Protocol>,
+    pub structs: Vec<Rc<Struct>>,
 }
 
 #[derive(Debug, Clone)]
@@ -64,6 +63,20 @@ pub struct Payload {
     pub items: Vec<(String, Type)>,
 }
 
+#[derive(Debug, Clone)]
+pub enum Type {
+    Bool,
+    Int(IntType),
+    Array(Box<Type>, Option<u64>),
+    Struct(Rc<Struct>),
+}
+
+#[derive(Debug, Clone)]
+pub struct Struct {
+    pub name: String,
+    pub fields: Vec<(String, Type)>,
+}
+
 // pub fn generate_rust_bindings(file: &ProtocolFileStateMachines) -> Result<String, ErrorInfo> {
 //     RustTemplate {
 //         file: validate_protocol_file(file),
@@ -72,28 +85,127 @@ pub struct Payload {
 //     .unwrap()
 // }
 
-pub fn validate_protocol_file(file: &ProtocolFileStateMachines) -> Result<ProtocolFile, ErrorInfo> {
-    let mut protocols = vec![];
-    for protocol in &file.protocols {
-        protocols.push(validate_protocol(protocol).map_err(|err| ErrorInfo {
-            name: protocol.name.clone(),
-            err,
-        })?);
+pub fn validate_protocol_file(
+    file: &ProtocolFileStateMachines,
+    structs: &[ast::Struct],
+) -> Result<File, ErrorInfo> {
+    let mut output_structs = vec![];
+    for struct_ in structs {
+        validate_struct(
+            &struct_.name,
+            structs,
+            &mut HashSet::new(),
+            &mut output_structs,
+        )
+        .unwrap();
     }
 
-    Ok(ProtocolFile { protocols })
+    let mut protocols = vec![];
+    for protocol in &file.protocols {
+        protocols.push(
+            validate_protocol(protocol, &output_structs).map_err(|err| ErrorInfo {
+                name: protocol.name.clone(),
+                err,
+            })?,
+        );
+    }
+
+    Ok(File {
+        protocols,
+        structs: output_structs,
+    })
 }
 
+pub fn validate_struct<'a>(
+    name: &'a str,
+    structs: &'a [ast::Struct],
+    previous_structs: &mut HashSet<&'a str>,
+    output_structs: &mut Vec<Rc<Struct>>,
+) -> Result<Rc<Struct>, Error> {
+    if !previous_structs.insert(name) {
+        return Err(Error::RecursiveStruct);
+    }
+    let fields = structs
+        .iter()
+        .find(|struct_| &struct_.name == name)
+        .ok_or(Error::UndefinedStruct)?
+        .fields
+        .iter()
+        .map(|(name, ty)| {
+            Ok((
+                name.clone(),
+                validate_type(ty, structs, previous_structs, output_structs)?,
+            ))
+        })
+        .collect::<Result<_, _>>()?;
+
+    let struct_ = Rc::new(Struct {
+        name: name.to_string(),
+        fields,
+    });
+
+    output_structs.push(Rc::clone(&struct_));
+
+    Ok(struct_)
+}
+
+pub fn validate_type<'a>(
+    ty: &'a ast::Type,
+    structs: &'a [ast::Struct],
+    previous_structs: &mut HashSet<&'a str>,
+    output_structs: &mut Vec<Rc<Struct>>,
+) -> Result<Type, Error> {
+    Ok(match ty {
+        ast::Type::Bool => Type::Bool,
+        ast::Type::Int(ty) => Type::Int(*ty),
+        ast::Type::Array(ty, size) => Type::Array(
+            Box::new(validate_type(
+                &ty,
+                structs,
+                previous_structs,
+                output_structs,
+            )?),
+            *size,
+        ),
+        ast::Type::Struct(name) => Type::Struct(validate_struct(
+            name,
+            structs,
+            previous_structs,
+            output_structs,
+        )?),
+    })
+}
+
+pub fn validate_type_simple(ty: &ast::Type, structs: &[Rc<Struct>]) -> Result<Type, Error> {
+    Ok(match ty {
+        ast::Type::Bool => Type::Bool,
+        ast::Type::Int(ty) => Type::Int(*ty),
+        ast::Type::Array(ty, size) => {
+            Type::Array(Box::new(validate_type_simple(&ty, structs)?), *size)
+        }
+        ast::Type::Struct(name) => Type::Struct(Rc::clone(
+            structs
+                .iter()
+                .find(|struct_| &*struct_.name == name)
+                .ok_or(Error::UndefinedStruct)?,
+        )),
+    })
+}
+
+#[derive(Debug, Clone)]
 pub struct ErrorInfo {
     name: String,
     err: Error,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum Error {
     IncorrectNumberOfRoles,
     InvalidDirection,
     MixedDirections,
     RepeatedLabel,
+    UndefinedStruct,
+    RecursiveStruct,
 }
 
 impl fmt::Display for ErrorInfo {
@@ -104,11 +216,16 @@ impl fmt::Display for ErrorInfo {
             Error::InvalidDirection => write!(f, "there is a message sending something from and to the same role"),
             Error::MixedDirections => write!(f, "there is a decision point in the protocol where there are a mix of directions"),
             Error::RepeatedLabel => write!(f, "there is a decision point in the protocol where the same label is used more than once"),
+            Error::UndefinedStruct => write!(f, "a struct is used but is not defined anywhere in the file"),
+            Error::RecursiveStruct => write!(f, "recursive struct definition"),
         }
     }
 }
 
-pub fn validate_protocol(protocol: &ProtocolStateMachine) -> Result<Protocol, Error> {
+pub fn validate_protocol(
+    protocol: &ProtocolStateMachine,
+    structs: &[Rc<Struct>],
+) -> Result<Protocol, Error> {
     let mut states = vec![];
 
     if protocol.roles.len() != 2 {
@@ -151,12 +268,12 @@ pub fn validate_protocol(protocol: &ProtocolStateMachine) -> Result<Protocol, Er
                 .iter()
                 .enumerate()
                 .map(|(index, (name, ty))| {
-                    (
+                    Ok((
                         name.clone().unwrap_or_else(|| format!("param{}", index)),
-                        ty.clone(),
-                    )
+                        validate_type_simple(ty, structs)?,
+                    ))
                 })
-                .collect();
+                .collect::<Result<_, _>>()?;
 
             messages.push(Message {
                 label: msg.label.clone(),
