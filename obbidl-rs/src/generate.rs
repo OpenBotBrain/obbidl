@@ -163,6 +163,7 @@ fn generate_protocol(
 
                     writeln!(f, "pub enum {}Response<C: Channel> {{", state.name)?;
                     for msg in &trans.messages {
+                        writeln!(f, "#[allow(non_camel_case_types)]")?;
                         writeln!(f, "{} {{", msg.label)?;
                         writeln!(f, "state: {}<C>, {}", msg.dest_state_name, msg.payload)?;
                         writeln!(f, "}},")?;
@@ -278,6 +279,8 @@ fn generate_protocol_file(f: &mut fmt::Formatter<'_>, file: &File) -> fmt::Resul
 
     for protocol in &file.protocols {
         writeln!(f, "pub mod {} {{", protocol.name)?;
+
+        // writeln!(f, "#![allow(non_camel_case_types)]")?;
 
         writeln!(f, "pub mod {} {{", protocol.role_a)?;
         generate_protocol(f, protocol, SimpleRole::A)?;

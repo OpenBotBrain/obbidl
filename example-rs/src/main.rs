@@ -1,6 +1,7 @@
-include!(concat!(env!("OUT_DIR"), "/test.rs"));
+include_obbidl_file!("test.txt");
 
 use obbidl::channel::TestChannel;
+use obbidl_derive::include_obbidl_file;
 use test::{cli, ser};
 
 fn main() {
@@ -9,9 +10,9 @@ fn main() {
     let client = cli::S0::new(client_channel);
     let server = ser::S0::new(server_channel);
 
-    client.send_send(&Point { x: 5, y: 2 }).unwrap().finish();
+    server.send_send(&Point { x: 5, y: 2 }).unwrap().finish();
 
-    match server.recv_default().unwrap() {
-        ser::S0Response::send { state, param0 } => println!(),
+    match client.recv_default().unwrap() {
+        cli::S0Response::send { state, param0 } => println!(),
     }
 }

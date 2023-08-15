@@ -18,6 +18,27 @@ mod state_machine;
 mod token;
 mod validate;
 
+pub fn build1(path: impl AsRef<Path>) -> String {
+    let path = path.as_ref();
+    let source = fs::read_to_string(path).unwrap();
+    let file = match parse::<File>(&source) {
+        Ok(ast) => ast,
+        Err(err) => {
+            print!("{}", err);
+            panic!()
+        }
+    };
+    let file_fsm = compile_protocol_file(&file);
+    let file = match validate_protocol_file(&file_fsm, &file.structs) {
+        Ok(file) => file,
+        Err(err) => {
+            println!("{}", err);
+            panic!()
+        }
+    };
+    GenerateRust(&file).to_string()
+}
+
 pub fn build(path: impl AsRef<Path>) {
     let path = path.as_ref();
     println!("cargo:rerun-if-changed={}", path.display());

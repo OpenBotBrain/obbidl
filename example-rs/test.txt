@@ -4,5 +4,5 @@ struct Point {
 }
 
 protocol test(role cli, role ser) {
-    send(struct Point) from cli to ser;
+    send(struct Point) from ser to cli;
 }
