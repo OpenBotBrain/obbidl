@@ -1,13 +1,13 @@
 use std::{
     env::{self, temp_dir},
     fs,
-    io::{Read, Write},
-    process::{Command, ExitCode, Stdio},
+    process::{Command, ExitCode},
 };
 
 use ast::File;
 use compile::compile_protocol_file;
 use generate::GenerateRust;
+use obbidl::format_rust;
 use parser::parse;
 use validate::validate_protocol_file;
 
@@ -89,16 +89,7 @@ fn main() -> ExitCode {
         };
         let output = GenerateRust(&file).to_string();
 
-        let child = Command::new("rustfmt")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()
-            .unwrap();
-
-        child.stdin.unwrap().write_all(output.as_bytes()).unwrap();
-        let mut buffer = vec![];
-        child.stdout.unwrap().read_to_end(&mut buffer).unwrap();
-        String::from_utf8(buffer).unwrap()
+        format_rust(&output)
     };
 
     if let Some(output_path) = output_path {
