@@ -9,11 +9,12 @@ use ast::File;
 use compile::compile_protocol_file;
 use parser::parse;
 
-use crate::{generate::GenerateRust, validate::validate_protocol_file};
+use crate::{format::binary::Binary, generate::GenerateRust, validate::validate_protocol_file};
 
 mod ast;
 pub mod channel;
 mod compile;
+mod format;
 mod generate;
 mod graph;
 mod lexer;
@@ -39,7 +40,7 @@ pub fn build1(source: &str) -> String {
             panic!()
         }
     };
-    format_rust(&GenerateRust(&file).to_string())
+    format_rust(&GenerateRust::<Binary>::new(&file).to_string())
 }
 
 pub fn build(path: impl AsRef<Path>) {
@@ -62,7 +63,7 @@ pub fn build(path: impl AsRef<Path>) {
             panic!()
         }
     };
-    let output = GenerateRust(&file).to_string();
+    let output = GenerateRust::<Binary>::new(&file).to_string();
     let file_name = path.file_name().unwrap();
 
     let out_dir = env::var("OUT_DIR").unwrap();

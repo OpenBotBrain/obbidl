@@ -6,12 +6,6 @@ use crate::{
     state_machine::StateName,
 };
 
-// #[derive(Debug, Clone, Template)]
-// #[template(path = "rust.jinja", whitespace = "minimize")]
-// struct RustTemplate {
-//     file: ProtocolFile,
-// }
-
 #[derive(Debug, Clone)]
 pub struct File {
     pub protocols: Vec<Protocol>,
@@ -76,14 +70,6 @@ pub struct Struct {
     pub name: String,
     pub fields: Vec<(String, Type)>,
 }
-
-// pub fn generate_rust_bindings(file: &ProtocolFileStateMachines) -> Result<String, ErrorInfo> {
-//     RustTemplate {
-//         file: validate_protocol_file(file),
-//     }
-//     .render()
-//     .unwrap()
-// }
 
 pub fn validate_protocol_file(
     file: &ProtocolFileStateMachines,

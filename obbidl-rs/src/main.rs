@@ -6,6 +6,7 @@ use std::{
 
 use ast::File;
 use compile::compile_protocol_file;
+use format::binary::Binary;
 use generate::GenerateRust;
 use obbidl::format_rust;
 use parser::parse;
@@ -14,6 +15,7 @@ use validate::validate_protocol_file;
 mod ast;
 mod channel;
 mod compile;
+mod format;
 mod generate;
 mod graph;
 mod lexer;
@@ -87,7 +89,7 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         };
-        let output = GenerateRust(&file).to_string();
+        let output = GenerateRust::<Binary>::new(&file).to_string();
 
         format_rust(&output)
     };

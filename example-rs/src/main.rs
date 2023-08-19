@@ -1,7 +1,8 @@
+use obbidl_derive::include_obbidl_file;
+
 include_obbidl_file!("test.txt");
 
 use obbidl::channel::{TestChannel, TestChannelError};
-use obbidl_derive::include_obbidl_file;
 use test::{cli, ser};
 
 fn main() {
