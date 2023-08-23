@@ -9,12 +9,12 @@ impl<'a> fmt::Display for GraphViz<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for protocol in &self.0.protocols {
             writeln!(f, "digraph {{")?;
-            writeln!(f, "  label=\"{}\"", protocol.name)?;
-            for trans in protocol.state_machine.iter_transitions() {
+            writeln!(f, "  label=\"{}\"", protocol.inner.name)?;
+            for trans in protocol.inner.state_machine.iter_transitions() {
                 writeln!(
                     f,
                     "  {} -> {}[label=\"{}\"];",
-                    trans.start.0, trans.end.0, trans.msg.label,
+                    trans.start.0, trans.end.0, trans.msg.inner.label,
                 )?;
             }
             writeln!(f, "}}")?;

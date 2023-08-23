@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::{ast::Message, compile::ProtocolFileStateMachines, graph::GraphViz};
+use crate::{ast::Message, compile::ProtocolFileStateMachines, graph::GraphViz, parser::Span};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct State(pub u32);
@@ -9,7 +9,7 @@ pub struct State(pub u32);
 pub struct Transition {
     pub start: State,
     pub end: State,
-    pub msg: Message,
+    pub msg: Span<Message>,
 }
 
 #[derive(Debug, Clone)]
@@ -17,14 +17,6 @@ pub struct StateMachine {
     state_count: u32,
     transitions: Vec<Transition>,
 }
-
-impl PartialEq for Transition {
-    fn eq(&self, other: &Self) -> bool {
-        self.start == other.start && self.end == other.end && self.msg.label == other.msg.label
-    }
-}
-
-impl Eq for Transition {}
 
 impl StateMachine {
     pub fn new() -> StateMachine {
@@ -55,7 +47,7 @@ impl StateMachine {
     pub fn iter_states(&self) -> impl Iterator<Item = State> + '_ {
         (0..self.state_count).map(|id| State(id))
     }
-    pub fn iter_trans_from(&self, start: State) -> impl Iterator<Item = (&Message, State)> {
+    pub fn iter_trans_from(&self, start: State) -> impl Iterator<Item = (&Span<Message>, State)> {
         self.iter_transitions().filter_map(move |trans| {
             if trans.start == start {
                 Some((&trans.msg, trans.end))

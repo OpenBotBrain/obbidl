@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    parser::{Parse, ParseResult},
+    parser::{Parse, ParseResult, Parser, Span},
     token::{Keyword, Symbol, TokenType},
 };
 
@@ -27,7 +27,7 @@ pub struct Sequence(pub Vec<Stmt>);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Stmt {
-    Message(Message),
+    Message(Span<Message>),
     Par(Sequences),
     Choice(Sequences),
     Fin(Sequence),
@@ -127,13 +127,19 @@ pub enum IntSize {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct File {
-    pub protocols: Vec<Protocol>,
-    pub structs: Vec<Struct>,
+    pub protocols: Vec<Span<Protocol>>,
+    pub structs: Vec<Span<Struct>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Payload {
-    pub items: Vec<(Option<String>, Type)>,
+    pub items: Vec<PayloadItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PayloadItem {
+    pub name: Option<String>,
+    pub ty: Type,
 }
 
 impl Payload {
@@ -142,20 +148,14 @@ impl Payload {
     }
 }
 
-impl Role {
-    pub fn new(name: impl Into<String>) -> Role {
-        Role(name.into())
-    }
-}
-
 impl Parse for Role {
-    fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
+    fn parse<'a>(parser: &mut Parser<'a>) -> ParseResult<'a, Self> {
         Ok(Role(parser.expect_token(TokenType::Ident)?.to_string()))
     }
 }
 
 impl Parse for Payload {
-    fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
+    fn parse<'a>(parser: &mut Parser<'a>) -> ParseResult<'a, Self> {
         let mut items = vec![];
         while parser
             .eat_token(TokenType::Symbol(Symbol::CloseBrace))
@@ -168,7 +168,7 @@ impl Parse for Payload {
                 None
             };
             let ty = parser.parse()?;
-            items.push((name, ty));
+            items.push(PayloadItem { name, ty });
             if !parser.eat_token(TokenType::Symbol(Symbol::Comma)).is_some() {
                 parser.expect_token(TokenType::Symbol(Symbol::CloseBrace))?;
                 break;
@@ -179,7 +179,7 @@ impl Parse for Payload {
 }
 
 impl Parse for Message {
-    fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
+    fn parse<'a>(parser: &mut Parser<'a>) -> ParseResult<'a, Self> {
         if let Some(label) = parser.eat_token(TokenType::Ident) {
             let payload = if parser
                 .eat_token(TokenType::Symbol(Symbol::OpenBrace))
@@ -207,7 +207,7 @@ impl Parse for Message {
 }
 
 impl Parse for Struct {
-    fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
+    fn parse<'a>(parser: &mut Parser<'a>) -> ParseResult<'a, Self> {
         parser.expect_token(TokenType::Keyword(Keyword::Struct))?;
         let name = parser.expect_token(TokenType::Ident)?.to_string();
         parser.expect_token(TokenType::Symbol(Symbol::OpenCurlyBrace))?;
@@ -233,7 +233,7 @@ impl Parse for Struct {
 }
 
 impl Parse for Type {
-    fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
+    fn parse<'a>(parser: &mut Parser<'a>) -> ParseResult<'a, Self> {
         let mut ty = if parser
             .eat_token(TokenType::Keyword(Keyword::Bool))
             .is_some()
@@ -280,7 +280,7 @@ impl Parse for Type {
 }
 
 impl Parse for Stmt {
-    fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
+    fn parse<'a>(parser: &mut Parser<'a>) -> ParseResult<'a, Self> {
         if let Some(msg) = parser.parse_maybe()? {
             Ok(Stmt::Message(msg))
         } else if parser
@@ -311,7 +311,7 @@ impl Parse for Stmt {
 }
 
 impl Parse for Sequence {
-    fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
+    fn parse<'a>(parser: &mut Parser<'a>) -> ParseResult<'a, Self> {
         parser.expect_token(TokenType::Symbol(Symbol::OpenCurlyBrace))?;
         let mut stmts = vec![];
         while parser
@@ -325,7 +325,7 @@ impl Parse for Sequence {
 }
 
 impl Parse for Protocol {
-    fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
+    fn parse<'a>(parser: &mut Parser<'a>) -> ParseResult<'a, Self> {
         parser.expect_token(TokenType::Keyword(Keyword::Protocol))?;
         let name = parser.expect_token(TokenType::Ident)?.to_string();
         let roles = if parser
@@ -361,13 +361,13 @@ impl fmt::Display for Role {
 }
 
 impl Parse for File {
-    fn parse<'a>(parser: &mut crate::parser::Parser<'a>) -> ParseResult<'a, Self> {
+    fn parse<'a>(parser: &mut Parser<'a>) -> ParseResult<'a, Self> {
         let mut protocols = vec![];
         let mut structs = vec![];
         while parser.eat_token(TokenType::End).is_none() {
-            if let Some(protocol) = parser.parse_maybe::<Protocol>()? {
+            if let Some(protocol) = parser.parse_maybe::<Span<Protocol>>()? {
                 protocols.push(protocol);
-            } else if let Some(struct_) = parser.parse_maybe::<Struct>()? {
+            } else if let Some(struct_) = parser.parse_maybe::<Span<Struct>>()? {
                 structs.push(struct_);
             } else {
                 return Err(parser.invalid_token());
@@ -377,10 +377,46 @@ impl Parse for File {
     }
 }
 
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Type::Bool => write!(f, "bool")?,
+            Type::Int(ty) => write!(f, "{}", ty)?,
+            Type::Array(ty, size) => match size {
+                Some(size) => write!(f, "{}[{}]", ty, size)?,
+                None => write!(f, "{}[]", ty)?,
+            },
+            Type::Struct(name) => write!(f, "struct {}", name)?,
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for PayloadItem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(name) = &self.name {
+            write!(f, "{}: ", name)?;
+        }
+        write!(f, "{}", self.ty)?;
+        Ok(())
+    }
+}
+
+impl fmt::Display for Message {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.label)?;
+        if self.payload.items.len() > 0 {
+            write!(f, "({})", display_utils::join(&self.payload.items, ", "))?;
+        }
+        write!(f, " from {} to {};", self.from, self.to)?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
-        ast::{IntSize, IntType, Message, Payload, Struct, Type},
+        ast::{IntSize, IntType, Message, Payload, PayloadItem, Struct, Type},
         parser::parse,
         report::Report,
     };
@@ -413,13 +449,13 @@ mod tests {
             Message {
                 label: "X".to_string(),
                 payload: Payload {
-                    items: vec![(
-                        Some("x".to_string()),
-                        Type::Int(IntType {
+                    items: vec![PayloadItem {
+                        name: Some("x".to_string()),
+                        ty: Type::Int(IntType {
                             signed: false,
                             size: IntSize::B32
                         })
-                    )]
+                    }]
                 },
                 from: role("Y"),
                 to: role("Z"),

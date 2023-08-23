@@ -1,8 +1,34 @@
-struct Point {
-    x: u32,
-    y: u32,
+protocol bad1(role cli, role ser) {
+    x from cli to cli;
 }
 
-protocol test(role cli, role ser) {
-    x(struct Point) from cli to ser;
+protocol bad2(role cli) {}
+
+protocol bad3(role cli, role ser) {
+    choice {
+        x from cli to ser;
+    } or {
+        y from cli to ser;
+    } or {
+        z from ser to cli;
+    }
+}
+
+protocol bad4(role cli, role ser) {
+    fin {
+        choice {
+            y from cli to ser;
+        } or {
+            x from cli to ser;
+        }
+    }
+    x from cli to ser;
+}
+
+protocol bad5(role cli, role ser) {
+    x(struct x) from cli to ser; 
+}
+
+struct thing {
+    x: struct thing,
 }

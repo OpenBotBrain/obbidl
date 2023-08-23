@@ -1,10 +1,13 @@
 use strum::EnumIter;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+use crate::lexer::Position;
+
+#[derive(Debug, Clone, Copy)]
 pub struct Token<'a> {
     pub ty: TokenType,
     pub contents: &'a str,
-    pub offset: usize,
+    pub start: Position,
+    pub end: Position,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

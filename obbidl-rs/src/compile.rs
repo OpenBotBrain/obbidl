@@ -2,6 +2,7 @@ use std::collections::{HashMap, VecDeque};
 
 use crate::{
     ast::{File, Message, Protocol, Role, Sequence, Sequences, Stmt},
+    parser::Span,
     state_machine::{StateMachine, Transition},
 };
 
@@ -14,7 +15,7 @@ pub struct ProtocolStateMachine {
 
 #[derive(Debug, Clone)]
 pub struct ProtocolFileStateMachines {
-    pub protocols: Vec<ProtocolStateMachine>,
+    pub protocols: Vec<Span<ProtocolStateMachine>>,
 }
 
 const DEFAULT_ROLES: &[&str] = &["C", "S"];
@@ -22,7 +23,11 @@ const DEFAULT_ROLES: &[&str] = &["C", "S"];
 pub fn compile_protocol_file(file: &File) -> ProtocolFileStateMachines {
     let mut protocols = vec![];
     for protocol in &file.protocols {
-        protocols.push(compile_protocol(protocol))
+        protocols.push(
+            protocol
+                .as_ref()
+                .map(|protocol| compile_protocol(&protocol)),
+        )
     }
     ProtocolFileStateMachines { protocols }
 }
@@ -74,7 +79,7 @@ fn stmt_may_terminate(stmt: &Stmt) -> bool {
     }
 }
 
-pub fn generate_transitions(seq: &Sequence) -> Vec<(Message, Sequence)> {
+pub fn generate_transitions(seq: &Sequence) -> Vec<(Span<Message>, Sequence)> {
     let mut iter = seq.0.iter();
     let Some(stmt) = iter.next() else {
         return vec![];

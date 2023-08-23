@@ -4,25 +4,51 @@ use crate::token::{Keyword, Symbol, Token, TokenType};
 
 pub struct Lexer<'a> {
     source: &'a str,
+    pos: Position,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Position {
+    pub line: u32,
+    pub column: u32,
     pub offset: usize,
+}
+
+impl Position {
+    pub const START: Position = Position {
+        line: 1,
+        column: 1,
+        offset: 0,
+    };
 }
 
 impl<'a> Lexer<'a> {
     pub fn new(source: &'a str) -> Lexer<'a> {
-        Lexer { source, offset: 0 }
+        Lexer {
+            source,
+            pos: Position::START,
+        }
     }
     fn peek_char(&self) -> Option<char> {
-        self.source[self.offset..].chars().next()
+        self.source[self.pos.offset..].chars().next()
     }
     fn next_char(&mut self) {
         if let Some(char) = self.peek_char() {
-            self.offset += char.len_utf8();
+            self.pos.offset += char.len_utf8();
+            if char == '\n' {
+                self.pos.line += 1;
+                self.pos.column = 1;
+            } else {
+                self.pos.column += 1;
+            }
+        } else {
+            panic!()
         }
     }
     fn consume_str(&mut self, s: &str) -> bool {
-        let starts_with = self.source[self.offset..].starts_with(s);
+        let starts_with = self.source[self.pos.offset..].starts_with(s);
         if starts_with {
-            self.offset += s.len();
+            self.pos.offset += s.len();
         }
         starts_with
     }
@@ -40,7 +66,7 @@ impl<'a> Lexer<'a> {
     }
     fn lex_token(&mut self, ch: char) -> TokenType {
         if ch.is_alphabetic() || ch == '_' {
-            let start = self.offset;
+            let start = self.pos.offset;
             self.next_char();
             while self
                 .peek_char()
@@ -48,7 +74,7 @@ impl<'a> Lexer<'a> {
             {
                 self.next_char();
             }
-            let end = self.offset;
+            let end = self.pos.offset;
             let ident = &self.source[start..end];
 
             for keyword in Keyword::iter() {
@@ -81,7 +107,7 @@ impl<'a> Lexer<'a> {
     pub fn next_token(&mut self) -> Token<'a> {
         loop {
             let Some(ch) = self.peek_char() else {
-                return Token { ty: TokenType::End, contents: "", offset: self.offset };
+                return Token { ty: TokenType::End, contents: "", start: self.pos, end: self.pos };
             };
 
             if ch.is_whitespace() {
@@ -101,13 +127,14 @@ impl<'a> Lexer<'a> {
                 continue;
             }
 
-            let start = self.offset;
+            let start = self.pos;
             let ty = self.lex_token(ch);
-            let end = self.offset;
+            let end = self.pos;
             return Token {
                 ty,
-                contents: &self.source[start..end],
-                offset: start,
+                contents: &self.source[start.offset..end.offset],
+                start,
+                end,
             };
         }
     }

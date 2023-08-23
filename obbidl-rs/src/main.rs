@@ -84,8 +84,10 @@ fn main() -> ExitCode {
         }
         let file = match validate_protocol_file(&file_fsm, &file.structs) {
             Ok(file) => file,
-            Err(err) => {
-                println!("{}", err);
+            Err(errors) => {
+                for err in errors {
+                    println!("{}", err.pretty_print(&source));
+                }
                 return ExitCode::FAILURE;
             }
         };

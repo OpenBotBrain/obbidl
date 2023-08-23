@@ -1,8 +1,11 @@
 use std::{collections::HashSet, fmt, rc::Rc};
 
+use colored::Colorize;
+
 use crate::{
-    ast::{self, IntType, Role},
+    ast,
     compile::{ProtocolFileStateMachines, ProtocolStateMachine},
+    parser::Span,
     state_machine::StateName,
 };
 
@@ -15,8 +18,8 @@ pub struct File {
 #[derive(Debug, Clone)]
 pub struct Protocol {
     pub name: String,
-    pub role_a: Role,
-    pub role_b: Role,
+    pub role_a: ast::Role,
+    pub role_b: ast::Role,
     pub states: Vec<State>,
 }
 
@@ -60,7 +63,7 @@ pub struct Payload {
 #[derive(Debug, Clone)]
 pub enum Type {
     Bool,
-    Int(IntType),
+    Int(ast::IntType),
     Array(Box<Type>, Option<u64>),
     Struct(Rc<Struct>),
 }
@@ -71,29 +74,35 @@ pub struct Struct {
     pub fields: Vec<(String, Type)>,
 }
 
-pub fn validate_protocol_file(
-    file: &ProtocolFileStateMachines,
-    structs: &[ast::Struct],
-) -> Result<File, ErrorInfo> {
+pub fn validate_protocol_file<'a>(
+    file: &'a ProtocolFileStateMachines,
+    structs: &'a [Span<ast::Struct>],
+) -> Result<File, Vec<Error<'a>>> {
+    let mut errors = vec![];
+
     let mut output_structs = vec![];
     for struct_ in structs {
-        validate_struct(
-            &struct_.name,
+        match validate_struct(
+            &struct_.inner.name,
             structs,
             &mut HashSet::new(),
             &mut output_structs,
-        )
-        .unwrap();
+        ) {
+            Ok(_) => (),
+            Err(err) => errors.push(Error::StructError { struct_, err }),
+        }
     }
 
     let mut protocols = vec![];
     for protocol in &file.protocols {
-        protocols.push(
-            validate_protocol(protocol, &output_structs).map_err(|err| ErrorInfo {
-                name: protocol.name.clone(),
-                err,
-            })?,
-        );
+        match validate_protocol(&protocol.inner, &output_structs) {
+            Ok(protocol) => protocols.push(protocol),
+            Err(err) => errors.push(Error::ProtocolError { protocol, err }),
+        }
+    }
+
+    if errors.len() > 0 {
+        return Err(errors);
     }
 
     Ok(File {
@@ -104,17 +113,18 @@ pub fn validate_protocol_file(
 
 pub fn validate_struct<'a>(
     name: &'a str,
-    structs: &'a [ast::Struct],
+    structs: &'a [Span<ast::Struct>],
     previous_structs: &mut HashSet<&'a str>,
     output_structs: &mut Vec<Rc<Struct>>,
-) -> Result<Rc<Struct>, Error> {
+) -> Result<Rc<Struct>, StructError<'a>> {
     if !previous_structs.insert(name) {
-        return Err(Error::RecursiveStruct);
+        return Err(StructError::RecursiveStruct(name));
     }
     let fields = structs
         .iter()
-        .find(|struct_| &struct_.name == name)
-        .ok_or(Error::UndefinedStruct)?
+        .find(|struct_| &struct_.inner.name == name)
+        .ok_or(StructError::UndefinedStruct(name))?
+        .inner
         .fields
         .iter()
         .map(|(name, ty)| {
@@ -137,10 +147,10 @@ pub fn validate_struct<'a>(
 
 pub fn validate_type<'a>(
     ty: &'a ast::Type,
-    structs: &'a [ast::Struct],
+    structs: &'a [Span<ast::Struct>],
     previous_structs: &mut HashSet<&'a str>,
     output_structs: &mut Vec<Rc<Struct>>,
-) -> Result<Type, Error> {
+) -> Result<Type, StructError<'a>> {
     Ok(match ty {
         ast::Type::Bool => Type::Bool,
         ast::Type::Int(ty) => Type::Int(*ty),
@@ -162,60 +172,158 @@ pub fn validate_type<'a>(
     })
 }
 
-pub fn validate_type_simple(ty: &ast::Type, structs: &[Rc<Struct>]) -> Result<Type, Error> {
+pub fn validate_type_ref<'a>(
+    ty: &'a ast::Type,
+    structs: &[Rc<Struct>],
+) -> Result<Type, ProtocolError<'a>> {
     Ok(match ty {
         ast::Type::Bool => Type::Bool,
         ast::Type::Int(ty) => Type::Int(*ty),
         ast::Type::Array(ty, size) => {
-            Type::Array(Box::new(validate_type_simple(&ty, structs)?), *size)
+            Type::Array(Box::new(validate_type_ref(&ty, structs)?), *size)
         }
         ast::Type::Struct(name) => Type::Struct(Rc::clone(
             structs
                 .iter()
                 .find(|struct_| &*struct_.name == name)
-                .ok_or(Error::UndefinedStruct)?,
+                .ok_or(ProtocolError::UndefinedStruct(name))?,
         )),
     })
 }
 
 #[derive(Debug, Clone)]
-pub struct ErrorInfo {
-    name: String,
-    err: Error,
+pub enum Error<'a> {
+    ProtocolError {
+        protocol: &'a Span<ProtocolStateMachine>,
+        err: ProtocolError<'a>,
+    },
+    StructError {
+        struct_: &'a Span<ast::Struct>,
+        err: StructError<'a>,
+    },
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum Error {
+pub struct PrettyPrintError<'a> {
+    error: &'a Error<'a>,
+    source: &'a str,
+}
+
+#[derive(Debug, Clone)]
+pub enum ProtocolError<'a> {
     IncorrectNumberOfRoles,
-    InvalidDirection,
-    MixedDirections,
-    RepeatedLabel,
-    UndefinedStruct,
-    RecursiveStruct,
+    InvalidDirection(&'a Span<ast::Message>),
+    MixedDirections(Vec<&'a Span<ast::Message>>),
+    RepeatedLabel(Vec<&'a Span<ast::Message>>),
+    UndefinedStruct(&'a str),
 }
 
-impl fmt::Display for ErrorInfo {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "validation error in protocol {}:", self.name)?;
-        match self.err {
-            Error::IncorrectNumberOfRoles => write!(f, "there must be two roles in the protocol"),
-            Error::InvalidDirection => write!(f, "there is a message sending something from and to the same role"),
-            Error::MixedDirections => write!(f, "there is a decision point in the protocol where there are a mix of directions"),
-            Error::RepeatedLabel => write!(f, "there is a decision point in the protocol where the same label is used more than once"),
-            Error::UndefinedStruct => write!(f, "a struct is used but is not defined anywhere in the file"),
-            Error::RecursiveStruct => write!(f, "recursive struct definition"),
+#[derive(Debug, Clone)]
+pub enum StructError<'a> {
+    UndefinedStruct(&'a str),
+    RecursiveStruct(&'a str),
+}
+
+impl<'a> Error<'a> {
+    pub fn pretty_print(&'a self, source: &'a str) -> PrettyPrintError<'a> {
+        PrettyPrintError {
+            error: self,
+            source,
         }
     }
 }
 
-pub fn validate_protocol(
-    protocol: &ProtocolStateMachine,
+impl<'a> fmt::Display for PrettyPrintError<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: ", "validation error".red())?;
+        match self.error {
+            Error::ProtocolError { protocol, err } => {
+                writeln!(f, "error in protocol '{}'", &protocol.inner.name)?;
+                write!(f, "{}", protocol.pretty_print(self.source))?;
+
+                match err {
+                    ProtocolError::IncorrectNumberOfRoles => {
+                        writeln!(
+                            f,
+                            "info: the protocol defined above has {} role(s) but it is required to have 2",
+                            protocol.inner.roles.len()
+                        )?;
+                    }
+                    ProtocolError::InvalidDirection(msg) => {
+                        writeln!(
+                            f,
+                            "info: the following message is to '{}' and from '{}'",
+                            msg.inner.to, msg.inner.from
+                        )?;
+                        write!(f, "{}", msg.pretty_print(self.source))?;
+                        writeln!(
+                            f,
+                            "info: modify the messages so the sender and receiver are not the same role"
+                        )?;
+                    }
+                    ProtocolError::MixedDirections(messages) => {
+                        writeln!(f, "info: the following messages are part of the same decision state but have different directions:")?;
+                        for msg in messages {
+                            write!(f, "{}", msg.pretty_print(self.source))?;
+                        }
+                        writeln!(
+                            f,
+                            "info: make sure all the messages have the same roles in the 'from' and 'to' section"
+                        )?;
+                    }
+                    ProtocolError::RepeatedLabel(messages) => {
+                        writeln!(f, "info: the following messages are part of the same decision state but have the same label:")?;
+                        for msg in messages {
+                            write!(f, "{}", msg.pretty_print(self.source))?;
+                        }
+                        writeln!(f, "info: rename the message labels so they are unique")?;
+                    }
+                    ProtocolError::UndefinedStruct(name) => {
+                        writeln!(
+                            f,
+                            "info: the struct '{}' is not defined anywhere in the file",
+                            name
+                        )?;
+                        writeln!(
+                            f,
+                            "info: either define this struct or change the type to a struct that exists"
+                        )?;
+                    }
+                }
+            }
+            Error::StructError { struct_, err } => {
+                writeln!(f, "error in struct definition '{}'", &struct_.inner.name)?;
+                write!(f, "{}", struct_.pretty_print(self.source))?;
+                match err {
+                    StructError::RecursiveStruct(_) => {
+                        writeln!(f, "info: the struct below contains a recursive definition")?;
+                        writeln!(f, "info: remove the recursive definition")?;
+                    }
+                    StructError::UndefinedStruct(name) => {
+                        writeln!(
+                            f,
+                            "info: the struct '{}' is not defined anywhere in the file",
+                            name
+                        )?;
+                        writeln!(
+                            f,
+                            "info: either define this struct or change the type to a struct that exists"
+                        )?;
+                    }
+                }
+            }
+        };
+        Ok(())
+    }
+}
+
+pub fn validate_protocol<'a>(
+    protocol: &'a ProtocolStateMachine,
     structs: &[Rc<Struct>],
-) -> Result<Protocol, Error> {
+) -> Result<Protocol, ProtocolError<'a>> {
     let mut states = vec![];
 
     if protocol.roles.len() != 2 {
-        return Err(Error::IncorrectNumberOfRoles);
+        return Err(ProtocolError::IncorrectNumberOfRoles);
     }
 
     let a = protocol.roles[0].clone();
@@ -228,41 +336,61 @@ pub fn validate_protocol(
 
         for (index, (msg, final_state)) in protocol.state_machine.iter_trans_from(state).enumerate()
         {
-            let dir = if msg.from == a && msg.to == b {
+            let dir = if msg.inner.from == a && msg.inner.to == b {
                 Direction::AToB
-            } else if msg.from == b && msg.to == a {
+            } else if msg.inner.from == b && msg.inner.to == a {
                 Direction::BToA
             } else {
-                return Err(Error::InvalidDirection);
+                return Err(ProtocolError::InvalidDirection(msg));
             };
             match overall_dir {
                 Some(overall_dir) => {
                     if overall_dir != dir {
-                        return Err(Error::MixedDirections);
+                        return Err(ProtocolError::MixedDirections(
+                            protocol
+                                .state_machine
+                                .iter_trans_from(state)
+                                .map(|(msg, _)| msg)
+                                .collect(),
+                        ));
                     }
                 }
                 None => overall_dir = Some(dir),
             }
 
-            if !labels.insert(msg.label.as_str()) {
-                return Err(Error::RepeatedLabel);
+            if !labels.insert(msg.inner.label.as_str()) {
+                let msgs = protocol
+                    .state_machine
+                    .iter_trans_from(state)
+                    .filter_map(|(m, _)| {
+                        if m.inner.label == msg.inner.label {
+                            Some(m)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                return Err(ProtocolError::RepeatedLabel(msgs));
             }
 
             let items = msg
+                .inner
                 .payload
                 .items
                 .iter()
                 .enumerate()
-                .map(|(index, (name, ty))| {
+                .map(|(index, item)| {
                     Ok((
-                        name.clone().unwrap_or_else(|| format!("param{}", index)),
-                        validate_type_simple(ty, structs)?,
+                        item.name
+                            .clone()
+                            .unwrap_or_else(|| format!("param{}", index)),
+                        validate_type_ref(&item.ty, structs)?,
                     ))
                 })
                 .collect::<Result<_, _>>()?;
 
             messages.push(Message {
-                label: msg.label.clone(),
+                label: msg.inner.label.clone(),
                 id: index as u8,
                 payload: Payload { items },
                 dest_state_name: final_state.name(),

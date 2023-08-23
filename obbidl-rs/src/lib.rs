@@ -35,8 +35,10 @@ pub fn build1(source: &str) -> String {
     let file_fsm = compile_protocol_file(&file);
     let file = match validate_protocol_file(&file_fsm, &file.structs) {
         Ok(file) => file,
-        Err(err) => {
-            println!("{}", err);
+        Err(errors) => {
+            for err in errors {
+                println!("{}", err.pretty_print(&source));
+            }
             panic!()
         }
     };
@@ -58,8 +60,10 @@ pub fn build(path: impl AsRef<Path>) {
     let file_fsm = compile_protocol_file(&file);
     let file = match validate_protocol_file(&file_fsm, &file.structs) {
         Ok(file) => file,
-        Err(err) => {
-            println!("{}", err);
+        Err(errors) => {
+            for err in errors {
+                println!("{}", err.pretty_print(&source));
+            }
             panic!()
         }
     };
