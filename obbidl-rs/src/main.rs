@@ -4,26 +4,10 @@ use std::{
     process::{Command, ExitCode},
 };
 
-use ast::File;
-use compile::compile_protocol_file;
-use format::binary::Binary;
-use generate::GenerateRust;
-use obbidl::format_rust;
-use parser::parse;
-use validate::validate_protocol_file;
-
-mod ast;
-mod channel;
-mod compile;
-mod format;
-mod generate;
-mod graph;
-mod lexer;
-mod parser;
-mod report;
-mod state_machine;
-mod token;
-mod validate;
+use obbidl_lib::{
+    ast::File, compile::compile_protocol_file, format::binary::Binary, format_rust,
+    generate::GenerateRust, parser::parse, validate::validate_protocol_file,
+};
 
 fn main() -> ExitCode {
     let mut graph = false;

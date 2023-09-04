@@ -244,10 +244,17 @@ name = "obbidl"
 version = "0.1.0"
 dependencies = [
  "askama",
+ "obbidl-lib",
+ "open",
+]
+
+[[package]]
+name = "obbidl-lib"
+version = "0.1.0"
+dependencies = [
  "colored",
  "display_utils",
  "itertools",
- "open",
  "strum",
 ]
 
