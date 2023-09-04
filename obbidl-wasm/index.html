@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <title>hello-wasm example</title>
+  </head>
+  <body>
+    <script type="module">
+      var protocol = `
+protocol test(role cli, role ser) {
+    a(u32) from cli to ser;
+    b(u32) from cli to ser;
+    c(u32) from ser to cli;
+}
+`
+      import init, { generate_fsm } from "./pkg/obbidl_wasm.js";
+      init().then(() => {
+          alert(generate_fsm(protocol));
+      });
+    </script>
+  </body>
+</html>

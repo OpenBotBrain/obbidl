@@ -1,0 +1,12 @@
+[package]
+name = "obbidl-wasm"
+version = "0.1.0"
+edition = "2021"
+description = "A library to make OBBIDL available as a WASM file."
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+obbidl-lib = { path = "../obbidl-lib" }
+wasm-bindgen = "0.2"
