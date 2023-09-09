@@ -11,18 +11,18 @@ use parser::parse;
 
 use crate::{format::binary::Binary, generate::GenerateRust, validate::validate_protocol_file};
 
-mod ast;
+pub mod ast;
 pub mod channel;
-mod compile;
-mod format;
-mod generate;
+pub mod compile;
+pub mod format;
+pub mod generate;
 mod graph;
 mod lexer;
-mod parser;
+pub mod parser;
 mod report;
 mod state_machine;
 mod token;
-mod validate;
+pub mod validate;
 
 pub fn build1(source: &str) -> String {
     let file = match parse::<File>(source) {
