@@ -29,6 +29,6 @@ protocol bad5(role cli, role ser) {
     x(struct x) from cli to ser; 
 }
 
-struct thing {
-    x: struct thing,
+struct bad6 {
+    x: struct bad6,
 }

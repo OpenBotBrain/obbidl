@@ -1,0 +1,13 @@
+protocol test(role board, role pi) {
+    par {
+        setup_gyro(range: Range) from pi to board;
+        fin {
+            read_gyro(Sample) from board to pi;
+        }
+    } and {
+        setup_accel(range: Range) from pi to board;
+        fin {
+            read_accel(Sample) from board to pi;
+        }
+    }
+}

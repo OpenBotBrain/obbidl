@@ -1,0 +1,13 @@
+struct Axis3 {
+    x: u32,
+    y: u32,
+    z: u32,
+}
+
+protocol test(role board, role rpi) {
+    init_gyro from rpi to board;
+    inf {
+        poll_gyro from pi to board;
+        gyro_data(struct Axis3) from board to pi;
+    }
+}
