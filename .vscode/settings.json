@@ -1,7 +1,7 @@
 {
     "rust-analyzer.linkedProjects": [
-        "./example-rs/Cargo.toml",
-        "./obbidl-rs/Cargo.toml",
+        "./example/Cargo.toml",
+        "./obbidl-lib/Cargo.toml",
         "./obbidl-derive/Cargo.toml",
     ],
 }

@@ -12,7 +12,7 @@ pub fn include_obbidl_file(tokens: TokenStream) -> TokenStream {
     let path = cwd.join(&str);
     let path_str = path.to_str().unwrap();
     let source = fs::read_to_string(&path).unwrap();
-    let output = obbidl::build1(&source);
+    let output = obbidl_lib::build1(&source);
 
     let out_dir = env::var("OUT_DIR").unwrap();
     let output_path = Path::new(&out_dir).join(&str).with_extension("rs");

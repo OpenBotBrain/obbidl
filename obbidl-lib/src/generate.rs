@@ -78,7 +78,7 @@ fn generate_protocol<F: Format>(
     role: SimpleRole,
 ) -> fmt::Result {
     writeln!(f, "use std::mem::size_of;")?;
-    writeln!(f, "use obbidl::channel::Channel;")?;
+    writeln!(f, "use obbidl_lib::channel::Channel;")?;
 
     for state in &protocol.states {
         writeln!(f, "#[must_use]")?;
